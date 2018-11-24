@@ -1,5 +1,9 @@
 # todo
 # - switch to python3? can we parse p2 and p3?
+# - docopt for parsing and another one for dispatch instead of click?
+# - ctrlp custom? useful would be: Test,module; multilevel search expressions
+# - options if/how nested functions and classes are listed or not
+# - options to also include non-qualified entries
 
 from __future__ import print_function
 
@@ -8,7 +12,7 @@ import os
 import os.path
 import uuid
 import ast # https://greentreesnakes.readthedocs.io/en/latest/index.html
-import click # todo docopt is also interesting, but the dispatch is still manual (?); would be nice to use docopt for parsing and then an easy dispatcher
+import click
 
 
 class Symbol(object):
@@ -76,12 +80,14 @@ def get_symbols_in_ClassDef(body):
 
 
 def create_tag_entries(symbols):
-	# todo might add tag for sorted for binary search, but not sure if that is always at the top?
-	# todo not sure if sorting is case-sensitive
-	return sorted([
+	entries = [
 			'%s\t%s\t%d;" %s' % (i.name, i.file, i.line, i.kind)
-			for i in symbols
-		])
+			for i in sorted(symbols, key=lambda s: s.name.lower())
+		]
+	# from vim's documentation I'm not sure if that has to be the first line, or still sorted
+	# I'm also not sure I do 'case-fold sorted' correctly
+	entries.insert(0, '!_TAG_FILE_SORTED\t2\tcase-fold sorted')
+	return entries
 
 
 def get_symbols_in_folders(folders):
