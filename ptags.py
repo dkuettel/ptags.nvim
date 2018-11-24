@@ -4,6 +4,7 @@
 # - ctrlp custom? useful would be: Test,module; multilevel search expressions
 # - options if/how nested functions and classes are listed or not
 # - options to also include non-qualified entries
+# - respect PYTHONPATH or whatever python uses to search all relevant locations?
 
 from __future__ import print_function
 
@@ -96,17 +97,18 @@ def get_symbols_in_folders(folders):
 
 def get_symbols_in_folder(folder):
 
-
 	symbols = []
 
 	for f in os.listdir(folder):
-		if os.path.isdir(f):
+		if os.path.isdir(os.path.join(folder, f)):
 			if '.' not in f:
 				symbols.extend(qualify(f, get_symbols_in_folder(os.path.join(folder, f))))
 		elif f == '__init__.py':
 			symbols.extend(get_symbols_in_file(os.path.join(folder, f)))
 		elif f.endswith('.py'):
 			symbols.extend(qualify(f[:-3], get_symbols_in_file(os.path.join(folder, f))))
+		else:
+			pass
 
 	return symbols
 
