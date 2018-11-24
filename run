@@ -1,0 +1,15 @@
+#!/bin/zsh
+set -eu -o pipefail
+
+docker build \
+	--quiet \
+	--tag x \
+	.
+
+docker run \
+	--interactive \
+	--tty \
+	--rm \
+	--mount type=bind,source=$(pwd),target=$(pwd) \
+	--workdir $(pwd) \
+	x
