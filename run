@@ -3,9 +3,10 @@ set -eu -o pipefail
 
 docker build \
 	--quiet \
-	--tag x \
+	--tag ptags \
 	.
 
+# todo when running in docker it's a bit difficult to make sure we mapped in all folders that that user has asked tags for
 docker run \
 	--interactive \
 	--tty \
@@ -13,5 +14,5 @@ docker run \
 	--mount type=bind,source=$(pwd),target=$(pwd) \
 	--workdir $(pwd) \
 	--user $(id -u):$(id -g) \
-	x \
-	python test.py $@
+	ptags \
+	python /app/ptags.py $@
