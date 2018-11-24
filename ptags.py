@@ -2,6 +2,7 @@
 # - switch to python3? can we parse p2 and p3?
 # - docopt for parsing and another one for dispatch instead of click?
 # - ctrlp custom? useful would be: Test,module; multilevel search expressions
+#   see https://github.com/kien/ctrlp.vim/tree/extensions
 # - options if/how nested functions and classes are listed or not
 # - options to also include non-qualified entries
 # - respect PYTHONPATH or whatever python uses to search all relevant locations?
