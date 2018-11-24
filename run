@@ -13,4 +13,5 @@ docker run \
 	--mount type=bind,source=$(pwd),target=$(pwd) \
 	--workdir $(pwd) \
 	--user $(id -u):$(id -g) \
-	x
+	x \
+	python test.py $@

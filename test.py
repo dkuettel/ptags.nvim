@@ -1,29 +1,14 @@
+# todo
+# - switch to python3? can we parse p2 and p3?
 
 from __future__ import print_function
-from IPython import embed
 
-
-def fib(n):
-	assert n >= 0
-	if n in {0, 1}:
-		return 1
-	else:
-		return fib(n-2) + fib(n-1)
-
-
-def print_table(n):
-	for i in range(n):
-		print(fib(i))
-
-
-class Test(object):
-	def some(self):
-		def f(): pass
-	x = 12
-
-
-
+import time
+import os
+import os.path
+import uuid
 import ast # https://greentreesnakes.readthedocs.io/en/latest/index.html
+import click # todo docopt is also interesting, but the dispatch is still manual (?); would be nice to use docopt for parsing and then an easy dispatcher
 
 
 class Symbol(object):
@@ -92,6 +77,7 @@ def get_symbols_in_ClassDef(body):
 
 def create_tag_entries(symbols):
 	# todo might add tag for sorted for binary search, but not sure if that is always at the top?
+	# todo not sure if sorting is case-sensitive
 	return sorted([
 			'%s\t%s\t%d;" %s' % (i.name, i.file, i.line, i.kind)
 			for i in symbols
@@ -104,8 +90,6 @@ def get_symbols_in_folders(folders):
 
 def get_symbols_in_folder(folder):
 
-	import os
-	import os.path
 
 	symbols = []
 
@@ -125,6 +109,49 @@ def get_symbols_in_file(file):
 	return filerize(file, get_symbols_in_Module(ast.parse(open(file).read())))
 
 
-symbols = get_symbols_in_folder('.')
-print('\n'.join(map(str, sorted(symbols, key=lambda s: s.name.lower()))))
-open('.tags', 'wt').write('\n'.join(create_tag_entries(symbols)))
+@click.command()
+@click.option('--out', '-o', default='.tags', type=click.Path(writable=True), help='output tag file', show_default=True)
+@click.option('--loop/--no-loop', '-l/', default=False, help='repeatedly update tags', show_default=True)
+@click.option('--interval', '-i', default=10.0, help='update tags every X seconds', show_default=True)
+@click.option('--atomic/--no-atomic', '-a/', default=True, help='update tag file atomically (write to unique temporary file and then atomically replace target tag file)', show_default=True)
+@click.argument('folders', nargs=-1, type=click.Path(exists=True))
+def main(out, loop, interval, atomic, folders):
+
+	if folders == ():
+		folders = ('.',)
+
+
+	if atomic:
+		tout = '%s-generating-%s' % (out, uuid.uuid4().hex) # in docker os.getpid() is not unique, usually 1
+		def write_entries(entries):
+			try:
+				open(tout, 'wt').write(entries)
+				os.rename(tout, out)
+			finally:
+				if os.path.exists(tout):
+					os.remove(tout)
+	else:
+		def write_entries(entries):
+			open(out, 'wt').write(entries)
+
+
+	while True:
+
+		dt = time.time()
+		print('scanning ...', end='')
+		symbols = get_symbols_in_folders(folders)
+		print(' found %d symbols (%d ms)' % (len(symbols), (time.time() - dt) * 1000))
+
+		entries = create_tag_entries(symbols)
+		entries = '\n'.join(entries)
+
+		write_entries(entries)
+
+		if loop:
+			time.sleep(interval)
+		else:
+			break
+
+
+if __name__ == '__main__':
+	main()
