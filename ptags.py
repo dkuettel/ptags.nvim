@@ -122,12 +122,17 @@ def get_symbols_in_file(file):
 @click.option('--loop/--no-loop', '-l/', default=False, help='repeatedly update tags', show_default=True)
 @click.option('--interval', '-i', default=10.0, help='update tags every X seconds', show_default=True)
 @click.option('--atomic/--no-atomic', '-a/', default=True, help='update tag file atomically (write to unique temporary file and then atomically replace target tag file)', show_default=True)
+@click.option('--quiet/--no-quiet', '-q/', default=False, help='suppress all output to stdout', show_default=True)
 @click.argument('folders', nargs=-1, type=click.Path(exists=True))
-def main(out, loop, interval, atomic, folders):
+def main(out, loop, interval, atomic, quiet, folders):
 
 	if folders == ():
 		folders = ('.',)
 
+	if quiet:
+		print = lambda *args, **kwargs: None
+	else:
+		print = __builtins__.print
 
 	if atomic:
 		tout = '%s-generating-%s' % (out, uuid.uuid4().hex) # in docker os.getpid() is not unique, usually 1
