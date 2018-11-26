@@ -115,7 +115,12 @@ def get_symbols_in_folder(folder):
 
 
 def get_symbols_in_file(file):
-	return filerize(file, get_symbols_in_Module(ast.parse(open(file).read())))
+	try:
+		t = ast.parse(open(file).read(), filename=file)
+	except SyntaxError as e:
+		print(e)
+		return []
+	return filerize(file, get_symbols_in_Module(t))
 
 
 @click.command()
