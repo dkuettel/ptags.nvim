@@ -1,4 +1,4 @@
-from python:2.7
+from python:2
 
 run apt-get -yqq update
 run apt-get -yqq install zsh
