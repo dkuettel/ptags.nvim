@@ -1,4 +1,5 @@
 # todo
+# - out=- works because - is technically a writeable file, but we should treat it differently
 # - docopt for parsing and another one for dispatch instead of click?
 # - ctrlp custom? useful would be: Test,module; multilevel search expressions
 #   see https://github.com/kien/ctrlp.vim/tree/extensions
@@ -172,24 +173,27 @@ def main(out, loop, interval, atomic, quiet, folders):
     else:
         print = __builtins__.print
 
-    if atomic:
-        tout = "%s-generating-%s" % (
-            out,
-            uuid.uuid4().hex,
-        )  # in docker os.getpid() is not unique, usually 1
-
-        def write_entries(entries):
-            try:
-                open(tout, "wt").write(entries)
-                os.rename(tout, out)
-            finally:
-                if os.path.exists(tout):
-                    os.remove(tout)
-
+    if out == "-":
+        write_entries = __builtins__.print
     else:
+        if atomic:
+            tout = "%s-generating-%s" % (
+                out,
+                uuid.uuid4().hex,
+            )  # in docker os.getpid() is not unique, usually 1
 
-        def write_entries(entries):
-            open(out, "wt").write(entries)
+            def write_entries(entries):
+                try:
+                    open(tout, "wt").write(entries)
+                    os.rename(tout, out)
+                finally:
+                    if os.path.exists(tout):
+                        os.remove(tout)
+
+        else:
+
+            def write_entries(entries):
+                open(out, "wt").write(entries)
 
     while True:
 
