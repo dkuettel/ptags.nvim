@@ -170,17 +170,13 @@ def main(out, loop, interval, atomic, quiet, folders):
 
     if quiet:
         print = lambda *args, **kwargs: None
-    else:
-        print = __builtins__.print
 
     if out == "-":
         write_entries = __builtins__.print
     else:
         if atomic:
-            tout = "%s-generating-%s" % (
-                out,
-                uuid.uuid4().hex,
-            )  # in docker os.getpid() is not unique, usually 1
+            # in docker os.getpid() is not unique, usually 1
+            tout = f"{out}-generating-{uuid.uuid4().hex}"
 
             def write_entries(entries):
                 try:
