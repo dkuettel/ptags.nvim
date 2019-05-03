@@ -1,0 +1,2 @@
+- make it truly iterateable, outputting not only at the end
+    - this would make fzf nicer as it builds up
