@@ -170,6 +170,8 @@ def main(out, loop, interval, atomic, quiet, folders):
 
     if quiet:
         print = lambda *args, **kwargs: None
+    else:
+        print = __builtins__.print
 
     if out == "-":
         write_entries = __builtins__.print
