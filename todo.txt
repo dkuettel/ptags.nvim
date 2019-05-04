@@ -1,2 +1,3 @@
 - make it truly iterateable, outputting not only at the end
     - this would make fzf nicer as it builds up
+- maybe make a fzf mode anyway, don't have to follow ctags format anymore
