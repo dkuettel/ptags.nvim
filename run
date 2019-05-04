@@ -2,17 +2,26 @@
 set -eu -o pipefail
 
 docker build \
-	--quiet \
-	--tag ptags \
-	.
+    --quiet \
+    --tag ptags \
+    .
 
 # todo when running in docker it's a bit difficult to make sure we mapped in all folders that that user has asked tags for
 docker run \
-	--interactive \
-	--tty \
-	--rm \
-	--mount type=bind,source=$(pwd),target=$(pwd) \
-	--workdir $(pwd) \
-	--user $(id -u):$(id -g) \
-	ptags \
-	python -u /app/ptags.py $@
+    --interactive \
+    --tty \
+    --rm \
+    --mount type=bind,source=$(pwd),target=$(pwd) \
+    --workdir $(pwd) \
+    --user $(id -u):$(id -g) \
+    ptags \
+    python -u /app/ptags.py $@
+
+# for when piping into fzf
+#docker run \
+    #--rm \
+    #--mount type=bind,source=$(pwd),target=$(pwd) \
+    #--workdir $(pwd) \
+    #--user $(id -u):$(id -g) \
+    #ptags \
+    #python /app/ptags.py $@
