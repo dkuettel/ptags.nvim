@@ -92,7 +92,7 @@ def create_tag_entries(symbols):
 
 def create_vim_fzf_entries(symbols):
     entries = [
-        f"{s.kind:>8}: {s.name}\t{s.file}\t{s.line}" for s in symbols
+        f"[0;92m{s.kind:>8}[0m: [0;96m{s.name}[0m\t[0;92m[3m{s.file}[0m\t{s.file}\t{s.line}" for s in symbols
     ]
     return entries
 
