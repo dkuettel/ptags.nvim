@@ -15,7 +15,9 @@ docker run \
     --workdir $(pwd) \
     --user $(id -u):$(id -g) \
     ptags \
-    python -u /app/ptags.py $@
+    python -u /app/ptags.py --out=- --fmt=vim-fzf
+
+    #python -u /app/ptags.py $@
 
 # for when piping into fzf
 #docker run \

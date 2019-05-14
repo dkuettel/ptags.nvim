@@ -90,6 +90,13 @@ def create_tag_entries(symbols):
     return entries
 
 
+def create_vim_fzf_entries(symbols):
+    entries = [
+        f"{s.kind:>8}: {s.name}\t{s.file}\t{s.line}" for s in symbols
+    ]
+    return entries
+
+
 def get_symbols_in_folders(folders):
     return [s for f in folders for s in get_symbols_in_folder(f)]
 
@@ -163,7 +170,10 @@ def get_symbols_in_file(file):
     show_default=True,
 )
 @click.argument("folders", nargs=-1, type=click.Path(exists=True))
-def main(out, loop, interval, atomic, quiet, folders):
+@click.option(
+    "--fmt", "-f", default="ctags", help="formats: ctags, vim-fzf", show_default=True
+)
+def main(out, loop, interval, atomic, quiet, folders, fmt):
 
     if folders == ():
         folders = (".",)
@@ -200,7 +210,12 @@ def main(out, loop, interval, atomic, quiet, folders):
         symbols = get_symbols_in_folders(folders)
         print(" found %d symbols (%d ms)" % (len(symbols), (time.time() - dt) * 1000))
 
-        entries = create_tag_entries(symbols)
+        if fmt == "ctags":
+            entries = create_tag_entries(symbols)
+        elif fmt == "vim-fzf":
+            entries = create_vim_fzf_entries(symbols)
+        else:
+            assert False, fmt
         entries = "\n".join(entries)
 
         write_entries(entries)
