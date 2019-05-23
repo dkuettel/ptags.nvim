@@ -13,6 +13,7 @@ import os.path
 import uuid
 import ast  # https://greentreesnakes.readthedocs.io/en/latest/index.html
 import click
+import pathlib
 
 
 class Symbol(object):
@@ -92,7 +93,8 @@ def create_tag_entries(symbols):
 
 def create_vim_fzf_entries(symbols):
     entries = [
-        f"[0;92m{s.kind:>8}[0m: [0;96m{s.name}[0m\t[0;92m[3m{s.file}[0m\t{s.file}\t{s.line}" for s in symbols
+        f"[0;92m{s.kind:>8}[0m: [0;96m{s.name}[0m\t[0;92m[3m{s.file}[0m\t{s.file}\t{s.line}"
+        for s in symbols
     ]
     return entries
 
@@ -132,6 +134,18 @@ def get_symbols_in_file(file):
     return filerize(file, get_symbols_in_Module(t))
 
 
+def get_symbols_in_sources(sources):
+    """ sources is a list of folder and/or files """
+    symbols = []
+    for source in sources:
+        sourcep = pathlib.Path(source)
+        if sourcep.is_dir():
+            symbols.extend(get_symbols_in_folder(source))
+        elif sourcep.is_file():
+            symbols.extend(get_symbols_in_file(source))
+    return symbols
+
+
 @click.command()
 @click.option(
     "--out",
@@ -169,14 +183,14 @@ def get_symbols_in_file(file):
     help="suppress all output to stdout",
     show_default=True,
 )
-@click.argument("folders", nargs=-1, type=click.Path(exists=True))
+@click.argument("sources", nargs=-1, type=click.Path(exists=True))
 @click.option(
     "--fmt", "-f", default="ctags", help="formats: ctags, vim-fzf", show_default=True
 )
-def main(out, loop, interval, atomic, quiet, folders, fmt):
+def main(out, loop, interval, atomic, quiet, sources, fmt):
 
-    if folders == ():
-        folders = (".",)
+    if sources == ():
+        sources = (".",)
 
     if quiet:
         print = lambda *args, **kwargs: None
@@ -207,7 +221,7 @@ def main(out, loop, interval, atomic, quiet, folders, fmt):
 
         dt = time.time()
         print("scanning ...", end="")
-        symbols = get_symbols_in_folders(folders)
+        symbols = get_symbols_in_sources(sources)
         print(" found %d symbols (%d ms)" % (len(symbols), (time.time() - dt) * 1000))
 
         if fmt == "ctags":
