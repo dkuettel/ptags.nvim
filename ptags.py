@@ -16,12 +16,13 @@ import click
 import pathlib
 
 
+# TODO use dataclass, and typing, pathlib
 class Symbol(object):
     def __init__(self, name=None, line=None, kind=None, file=None):
         self.name = name
-        self.file = file
         self.line = line  # 1 based
         self.kind = kind
+        self.file = file
 
     def __str__(self):
         return "%s [%s]" % (self.name, self.kind)
@@ -97,6 +98,13 @@ def create_vim_fzf_entries(symbols):
         for s in symbols
     ]
     return entries
+
+
+def create_vim_telescope_entries(symbols):
+    return [
+        "\x00".join([s.name, str(s.line), s.kind, os.path.abspath(s.file)])
+        for s in symbols
+    ]
 
 
 def get_symbols_in_folders(folders):
@@ -185,7 +193,7 @@ def get_symbols_in_sources(sources):
 )
 @click.argument("sources", nargs=-1, type=click.Path(exists=True))
 @click.option(
-    "--fmt", "-f", default="ctags", help="formats: ctags, vim-fzf", show_default=True
+    "--fmt", "-f", default="ctags", help="formats: ctags, vim-fzf, vim-telescope", show_default=True
 )
 def main(out, loop, interval, atomic, quiet, sources, fmt):
 
@@ -228,6 +236,8 @@ def main(out, loop, interval, atomic, quiet, sources, fmt):
             entries = create_tag_entries(symbols)
         elif fmt == "vim-fzf":
             entries = create_vim_fzf_entries(symbols)
+        elif fmt == "vim-telescope":
+            entries = create_vim_telescope_entries(symbols)
         else:
             assert False, fmt
         entries = "\n".join(entries)
