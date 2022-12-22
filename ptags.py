@@ -11,8 +11,10 @@ import ast  # https://greentreesnakes.readthedocs.io/en/latest/index.html
 import os
 import os.path
 import pathlib
+import re
 import time
 import uuid
+from typing import Callable
 
 import click
 
@@ -108,26 +110,30 @@ def create_vim_telescope_entries(symbols):
     ]
 
 
-def get_symbols_in_folders(folders):
-    return [s for f in folders for s in get_symbols_in_folder(f)]
+def get_symbols_in_folders(folders, should_exclude: Callable[[str], bool]):
+    return [
+        s
+        for f in folders
+        if not should_exclude(f)
+        for s in get_symbols_in_folder(f, should_exclude)
+    ]
 
 
-def get_symbols_in_folder(folder):
+def get_symbols_in_folder(folder, should_exclude: Callable[[str], bool]):
 
     symbols = []
 
     for f in os.listdir(folder):
-        if os.path.isdir(os.path.join(folder, f)):
+        full = os.path.join(folder, f)
+        if should_exclude(full):
+            continue
+        if os.path.isdir(full):
             if "." not in f:
-                symbols.extend(
-                    qualify(f, get_symbols_in_folder(os.path.join(folder, f)))
-                )
+                symbols.extend(qualify(f, get_symbols_in_folder(full, should_exclude)))
         elif f == "__init__.py":
-            symbols.extend(get_symbols_in_file(os.path.join(folder, f)))
+            symbols.extend(get_symbols_in_file(full))
         elif f.endswith(".py"):
-            symbols.extend(
-                qualify(f[:-3], get_symbols_in_file(os.path.join(folder, f)))
-            )
+            symbols.extend(qualify(f[:-3], get_symbols_in_file(full)))
         else:
             pass
 
@@ -143,19 +149,30 @@ def get_symbols_in_file(file):
     return filerize(file, get_symbols_in_Module(t))
 
 
-def get_symbols_in_sources(sources):
+def get_symbols_in_sources(sources: tuple[str, ...], excludes: tuple[str, ...]):
     """sources is a list of folder and/or files"""
+    exclude_matchers = [re.compile(i) for i in excludes]
+
+    def should_exclude(p: str) -> bool:
+        for m in exclude_matchers:
+            if m.fullmatch(p) is not None:
+                return True
+        return False
+
     symbols = []
     for source in sources:
+        if should_exclude(source):
+            continue
         sourcep = pathlib.Path(source)
         if sourcep.is_dir():
-            symbols.extend(get_symbols_in_folder(source))
+            symbols.extend(get_symbols_in_folder(source, should_exclude))
         elif sourcep.is_file():
             symbols.extend(get_symbols_in_file(source))
     return symbols
 
 
 @click.command()
+@click.argument("sources", nargs=-1, type=click.Path(exists=True))
 @click.option(
     "--out",
     "-o",
@@ -192,7 +209,6 @@ def get_symbols_in_sources(sources):
     help="suppress all output to stdout",
     show_default=True,
 )
-@click.argument("sources", nargs=-1, type=click.Path(exists=True))
 @click.option(
     "--fmt",
     "-f",
@@ -200,18 +216,27 @@ def get_symbols_in_sources(sources):
     help="formats: ctags, vim-fzf, vim-telescope",
     show_default=True,
 )
-def main(out, loop, interval, atomic, quiet, sources, fmt):
+@click.option(
+    "excludes",
+    "--exclude",
+    "-e",
+    default=[],
+    multiple=True,
+    help="Regexps for paths to exlude. Can be used multiple times.",
+    # TODO it's not clear if it's on the full path, or on the path starting with the source entry
+)
+def main(out, sources, loop, interval, atomic, quiet, fmt, excludes):
 
     if sources == ():
         sources = (".",)
 
     if quiet:
-        print = lambda *args, **kwargs: None
+        print = lambda *args, **kwargs: None  # pyright: ignore
     else:
         print = __builtins__.print
 
     if out == "-":
-        write_entries = __builtins__.print
+        write_entries = __builtins__.print  # pyright: ignore
     else:
         if atomic:
             # in docker os.getpid() is not unique, usually 1
@@ -234,7 +259,7 @@ def main(out, loop, interval, atomic, quiet, sources, fmt):
 
         dt = time.time()
         print("scanning ...", end="")
-        symbols = get_symbols_in_sources(sources)
+        symbols = get_symbols_in_sources(sources, excludes)
         print(" found %d symbols (%d ms)" % (len(symbols), (time.time() - dt) * 1000))
 
         if fmt == "ctags":
@@ -256,4 +281,4 @@ def main(out, loop, interval, atomic, quiet, sources, fmt):
 
 
 if __name__ == "__main__":
-    main()
+    main()  # pyright: ignore
