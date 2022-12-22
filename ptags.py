@@ -7,13 +7,14 @@
 # - options to also include non-qualified entries
 # - respect PYTHONPATH or whatever python uses to search all relevant locations?
 
-import time
+import ast  # https://greentreesnakes.readthedocs.io/en/latest/index.html
 import os
 import os.path
-import uuid
-import ast  # https://greentreesnakes.readthedocs.io/en/latest/index.html
-import click
 import pathlib
+import time
+import uuid
+
+import click
 
 
 # TODO use dataclass, and typing, pathlib
@@ -143,7 +144,7 @@ def get_symbols_in_file(file):
 
 
 def get_symbols_in_sources(sources):
-    """ sources is a list of folder and/or files """
+    """sources is a list of folder and/or files"""
     symbols = []
     for source in sources:
         sourcep = pathlib.Path(source)
@@ -193,7 +194,11 @@ def get_symbols_in_sources(sources):
 )
 @click.argument("sources", nargs=-1, type=click.Path(exists=True))
 @click.option(
-    "--fmt", "-f", default="ctags", help="formats: ctags, vim-fzf, vim-telescope", show_default=True
+    "--fmt",
+    "-f",
+    default="ctags",
+    help="formats: ctags, vim-fzf, vim-telescope",
+    show_default=True,
 )
 def main(out, loop, interval, atomic, quiet, sources, fmt):
 
