@@ -14,6 +14,8 @@ ipython==8.11.0
 # - also treesitter might be able to recover?
 # - first just skip file, would be nice if we could at least get the tree up to error?
 
+from __future__ import annotations
+
 import ast  # https://greentreesnakes.readthedocs.io/en/latest/index.html
 import os
 import os.path
@@ -31,8 +33,7 @@ import click
 from tabulate import tabulate
 
 
-# TODO frozen? we want to be fast still
-@dataclass
+@dataclass(frozen=True)
 class Symbol(object):
     name: Optional[str] = None
     line: Optional[int] = None  # 1-based
@@ -40,23 +41,34 @@ class Symbol(object):
     # TODO this should be a Path then
     file: Optional[str] = None
 
+    def qualified(self, qualifier: str) -> Symbol:
+        return Symbol(
+            # TODO problem when None
+            f"{qualifier}.{self.name}",
+            self.line,
+            self.kind,
+            self.file,
+        )
+
+    # TODO maybe not necessary anymore when None design fixed?
+    def with_file(self, file: str) -> Symbol:
+        return Symbol(
+            self.name,
+            self.line,
+            self.kind,
+            file,
+        )
+
     def __str__(self):
         return "%s [%s]" % (self.name, self.kind)
 
 
-# TODO make clear either in place (no return) or immutable with new list returned
-def qualify(qualifier: str, symbols: list[Symbol]) -> list[Symbol]:
-    for s in symbols:
-        assert s.name is not None
-        s.name = qualifier + "." + s.name
-    return symbols
+def symbols_qualified(symbols: Sequence[Symbol], qualifier: str) -> list[Symbol]:
+    return [s.qualified(qualifier) for s in symbols]
 
 
-# TODO rename, add_file, with_file?
-def filerize(file: Path, symbols: list[Symbol]) -> list[Symbol]:
-    for s in symbols:
-        s.file = str(file)
-    return symbols
+def symbols_with_file(symbols: Sequence[Symbol], file: Path) -> list[Symbol]:
+    return [s.with_file(str(file)) for s in symbols]
 
 
 def get_symbols_in_Module(node: AST) -> list[Symbol]:
@@ -66,11 +78,15 @@ def get_symbols_in_Module(node: AST) -> list[Symbol]:
     class V(ast.NodeVisitor):
         def visit_FunctionDef(self, node: ast.FunctionDef):
             symbols.append(Symbol(node.name, node.lineno, "function"))
-            symbols.extend(qualify(node.name, get_symbols_in_FunctionDef(node.body)))
+            symbols.extend(
+                symbols_qualified(get_symbols_in_FunctionDef(node.body), node.name)
+            )
 
         def visit_ClassDef(self, node: ast.ClassDef):
             symbols.append(Symbol(node.name, node.lineno, "class"))
-            symbols.extend(qualify(node.name, get_symbols_in_ClassDef(node.body)))
+            symbols.extend(
+                symbols_qualified(get_symbols_in_ClassDef(node.body), node.name)
+            )
 
         def visit_Assign(self, node: ast.Assign):
             for t in node.targets:
@@ -89,7 +105,9 @@ def get_symbols_in_FunctionDef(body: Sequence[ast.stmt]) -> list[Symbol]:
     class V(ast.NodeVisitor):
         def visit_ClassDef(self, node: ast.ClassDef):
             symbols.append(Symbol(node.name, node.lineno, "class"))
-            symbols.extend(qualify(node.name, get_symbols_in_ClassDef(node.body)))
+            symbols.extend(
+                symbols_qualified(get_symbols_in_ClassDef(node.body), node.name)
+            )
 
     # TODO is this necessary? cant we just do it on body?
     # the documentation is not clear even if it goes recursively
@@ -165,13 +183,15 @@ def get_symbols_in_folder(
         if should_exclude(str(f)):
             continue
         if f.is_dir():
-            symbols.extend(qualify(f.name, get_symbols_in_folder(f, should_exclude)))
+            symbols.extend(
+                symbols_qualified(get_symbols_in_folder(f, should_exclude), f.name)
+            )
         elif f.name == "__init__.py":
             symbols.extend(get_symbols_in_file(f))
         elif f.suffix == ".py":
             # TODO this way we will miss any hash-banged python files
             # unless they are listed explicitely I think
-            symbols.extend(qualify(f.stem, get_symbols_in_file(f)))
+            symbols.extend(symbols_qualified(get_symbols_in_file(f), f.stem))
         else:
             pass
 
@@ -186,7 +206,7 @@ def get_symbols_in_file(file: Path) -> list[Symbol]:
         # or skip or reuse cached for that file?
         print(e)
         return []
-    return filerize(file, get_symbols_in_Module(t))
+    return symbols_with_file(get_symbols_in_Module(t), file)
 
 
 def get_symbols_in_sources(
