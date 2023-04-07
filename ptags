@@ -8,15 +8,11 @@ ipython==8.11.0
 """
 
 # todo
-# - docopt for parsing and another one for dispatch instead of click?
-# - ctrlp custom? useful would be: Test,module; multilevel search expressions
-#   see https://github.com/kien/ctrlp.vim/tree/extensions
-# - options if/how nested functions and classes are listed or not
-# - options to also include non-qualified entries
 # - respect PYTHONPATH or whatever python uses to search all relevant locations?
 #   - what files are considered is one thing, another is the "bases" for fully qualified names
 # - maybe https://pypi.org/project/parso/
 # - also treesitter might be able to recover?
+# - first just skip file, would be nice if we could at least get the tree up to error?
 
 import ast  # https://greentreesnakes.readthedocs.io/en/latest/index.html
 import os
@@ -174,6 +170,7 @@ def get_symbols_in_folder(
             symbols.extend(get_symbols_in_file(f))
         elif f.suffix == ".py":
             # TODO this way we will miss any hash-banged python files
+            # unless they are listed explicitely I think
             symbols.extend(qualify(f.stem, get_symbols_in_file(f)))
         else:
             pass
@@ -262,8 +259,6 @@ def log(message: str, end: str = "\n"):
 def main(
     out: str, sources: Sequence[str], quiet: bool, fmt: str, excludes: Sequence[str]
 ):
-    # TODO try the other click that stefan mentioned? shorter?
-
     if len(sources) == 0:
         sources = (".",)
 
