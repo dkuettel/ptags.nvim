@@ -27,7 +27,7 @@ from ast import AST
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, TextIO
+from typing import Callable, TextIO
 
 import click
 from tabulate import tabulate
@@ -35,28 +35,17 @@ from tabulate import tabulate
 
 @dataclass(frozen=True)
 class Symbol(object):
-    name: Optional[str] = None
-    line: Optional[int] = None  # 1-based
-    kind: Optional[str] = None
-    # TODO this should be a Path then
-    file: Optional[str] = None
+    name: str
+    line: int  # 1-based
+    kind: str
+    file: Path
 
     def qualified(self, qualifier: str) -> Symbol:
         return Symbol(
-            # TODO problem when None
             f"{qualifier}.{self.name}",
             self.line,
             self.kind,
             self.file,
-        )
-
-    # TODO maybe not necessary anymore when None design fixed?
-    def with_file(self, file: str) -> Symbol:
-        return Symbol(
-            self.name,
-            self.line,
-            self.kind,
-            file,
         )
 
     def __str__(self):
@@ -67,46 +56,44 @@ def symbols_qualified(symbols: Sequence[Symbol], qualifier: str) -> list[Symbol]
     return [s.qualified(qualifier) for s in symbols]
 
 
-def symbols_with_file(symbols: Sequence[Symbol], file: Path) -> list[Symbol]:
-    return [s.with_file(str(file)) for s in symbols]
-
-
-def get_symbols_in_Module(node: AST) -> list[Symbol]:
+def get_symbols_in_Module(file: Path, node: AST) -> list[Symbol]:
 
     symbols: list[Symbol] = []
 
     class V(ast.NodeVisitor):
         def visit_FunctionDef(self, node: ast.FunctionDef):
-            symbols.append(Symbol(node.name, node.lineno, "function"))
+            symbols.append(Symbol(node.name, node.lineno, "function", file))
             symbols.extend(
-                symbols_qualified(get_symbols_in_FunctionDef(node.body), node.name)
+                symbols_qualified(
+                    get_symbols_in_FunctionDef(file, node.body), node.name
+                )
             )
 
         def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(Symbol(node.name, node.lineno, "class"))
+            symbols.append(Symbol(node.name, node.lineno, "class", file))
             symbols.extend(
-                symbols_qualified(get_symbols_in_ClassDef(node.body), node.name)
+                symbols_qualified(get_symbols_in_ClassDef(file, node.body), node.name)
             )
 
         def visit_Assign(self, node: ast.Assign):
             for t in node.targets:
                 for i in ast.walk(t):
                     if isinstance(i, ast.Name):
-                        symbols.append(Symbol(i.id, node.lineno, "variable"))
+                        symbols.append(Symbol(i.id, node.lineno, "variable", file))
 
     V().visit(node)
     return symbols
 
 
-def get_symbols_in_FunctionDef(body: Sequence[ast.stmt]) -> list[Symbol]:
+def get_symbols_in_FunctionDef(file: Path, body: Sequence[ast.stmt]) -> list[Symbol]:
 
     symbols: list[Symbol] = []
 
     class V(ast.NodeVisitor):
         def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(Symbol(node.name, node.lineno, "class"))
+            symbols.append(Symbol(node.name, node.lineno, "class", file))
             symbols.extend(
-                symbols_qualified(get_symbols_in_ClassDef(node.body), node.name)
+                symbols_qualified(get_symbols_in_ClassDef(file, node.body), node.name)
             )
 
     # TODO is this necessary? cant we just do it on body?
@@ -119,8 +106,8 @@ def get_symbols_in_FunctionDef(body: Sequence[ast.stmt]) -> list[Symbol]:
     return symbols
 
 
-def get_symbols_in_ClassDef(body: Sequence[ast.stmt]) -> list[Symbol]:
-    return [j for i in body for j in get_symbols_in_Module(i)]
+def get_symbols_in_ClassDef(file: Path, body: Sequence[ast.stmt]) -> list[Symbol]:
+    return [j for i in body for j in get_symbols_in_Module(file, i)]
 
 
 def make_entries(fmt: str, symbols: Sequence[Symbol], out: TextIO):
@@ -206,7 +193,7 @@ def get_symbols_in_file(file: Path) -> list[Symbol]:
         # or skip or reuse cached for that file?
         print(e)
         return []
-    return symbols_with_file(get_symbols_in_Module(t), file)
+    return get_symbols_in_Module(file, t)
 
 
 def get_symbols_in_sources(
