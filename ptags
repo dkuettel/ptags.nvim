@@ -1,0 +1,284 @@
+#!python-with-venv
+# pyright: strict
+
+"""! python3.10 requirements
+click==8.1.3
+tabulate==0.9.0
+ipython==8.11.0
+"""
+
+# todo
+# - docopt for parsing and another one for dispatch instead of click?
+# - ctrlp custom? useful would be: Test,module; multilevel search expressions
+#   see https://github.com/kien/ctrlp.vim/tree/extensions
+# - options if/how nested functions and classes are listed or not
+# - options to also include non-qualified entries
+# - respect PYTHONPATH or whatever python uses to search all relevant locations?
+#   - what files are considered is one thing, another is the "bases" for fully qualified names
+# - maybe https://pypi.org/project/parso/
+# - also treesitter might be able to recover?
+
+import ast  # https://greentreesnakes.readthedocs.io/en/latest/index.html
+import os
+import os.path
+import pathlib
+import re
+import time
+from ast import AST
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Optional
+
+import click
+from tabulate import tabulate
+
+
+# TODO frozen? we want to be fast still
+@dataclass
+class Symbol(object):
+    name: Optional[str] = None
+    line: Optional[int] = None  # 1-based
+    kind: Optional[str] = None
+    # TODO this should be a Path then
+    file: Optional[str] = None
+
+    def __str__(self):
+        return "%s [%s]" % (self.name, self.kind)
+
+
+# TODO make clear either in place (no return) or immutable with new list returned
+def qualify(qualifier: str, symbols: list[Symbol]) -> list[Symbol]:
+    for s in symbols:
+        assert s.name is not None
+        s.name = qualifier + "." + s.name
+    return symbols
+
+
+# TODO rename, add_file, with_file?
+def filerize(file: Path, symbols: list[Symbol]) -> list[Symbol]:
+    for s in symbols:
+        s.file = str(file)
+    return symbols
+
+
+def get_symbols_in_Module(node: AST) -> list[Symbol]:
+
+    symbols: list[Symbol] = []
+
+    class V(ast.NodeVisitor):
+        def visit_FunctionDef(self, node: ast.FunctionDef):
+            symbols.append(Symbol(node.name, node.lineno, "function"))
+            symbols.extend(qualify(node.name, get_symbols_in_FunctionDef(node.body)))
+
+        def visit_ClassDef(self, node: ast.ClassDef):
+            symbols.append(Symbol(node.name, node.lineno, "class"))
+            symbols.extend(qualify(node.name, get_symbols_in_ClassDef(node.body)))
+
+        def visit_Assign(self, node: ast.Assign):
+            for t in node.targets:
+                for i in ast.walk(t):
+                    if isinstance(i, ast.Name):
+                        symbols.append(Symbol(i.id, node.lineno, "variable"))
+
+    V().visit(node)
+    return symbols
+
+
+def get_symbols_in_FunctionDef(body: Sequence[ast.stmt]) -> list[Symbol]:
+
+    symbols: list[Symbol] = []
+
+    class V(ast.NodeVisitor):
+        def visit_ClassDef(self, node: ast.ClassDef):
+            symbols.append(Symbol(node.name, node.lineno, "class"))
+            symbols.extend(qualify(node.name, get_symbols_in_ClassDef(node.body)))
+
+    # TODO is this necessary? cant we just do it on body?
+    # the documentation is not clear even if it goes recursively
+    # ah that would work if we didnt pass in body.body
+    for i in body:
+        # TODO and if we need the loop, dont recreate class
+        V().visit(i)
+
+    return symbols
+
+
+def get_symbols_in_ClassDef(body: Sequence[ast.stmt]) -> list[Symbol]:
+    return [j for i in body for j in get_symbols_in_Module(i)]
+
+
+def create_human_entries(symbols: Sequence[Symbol]) -> list[str]:
+    headers = ["location", "kind", "name"]
+    data = [[f"{s.file}:{s.line}", f"{s.kind}", f"{s.name}"] for s in symbols]
+    # TODO a bit unclean, make the outputters just produce a str?
+    return tabulate(data, headers=headers).splitlines()
+
+
+def create_tag_entries(symbols: Sequence[Symbol]) -> list[str]:
+    entries = [
+        '%s\t%s\t%d;" %s' % (i.name, i.file, i.line, i.kind)
+        # TODO not nice here that s.name could be None, can we statically type this?
+        for i in sorted(symbols, key=lambda s: (s.name or "").lower())
+    ]
+    # from vim's documentation I'm not sure if that has to be the first line, or still sorted
+    # I'm also not sure I do 'case-fold sorted' correctly
+    entries.insert(0, "!_TAG_FILE_SORTED\t2\tcase-fold sorted")
+    return entries
+
+
+def create_vim_telescope_entries(symbols: Sequence[Symbol]) -> list[str]:
+    return [
+        # TODO also here s.file and others could be None :/
+        "\x00".join(
+            [
+                s.name or "",
+                str(s.line or -1),
+                s.kind or "",
+                str(os.path.abspath(s.file or ".")),
+            ]
+        )
+        for s in symbols
+    ]
+
+
+def get_symbols_in_folder(
+    folder: Path, should_exclude: Callable[[str], bool]
+) -> list[Symbol]:
+
+    symbols: list[Symbol] = []
+
+    for f in folder.iterdir():
+        if should_exclude(str(f)):
+            continue
+        if f.is_dir():
+            symbols.extend(qualify(f.name, get_symbols_in_folder(f, should_exclude)))
+        elif f.name == "__init__.py":
+            symbols.extend(get_symbols_in_file(f))
+        elif f.suffix == ".py":
+            # TODO this way we will miss any hash-banged python files
+            symbols.extend(qualify(f.stem, get_symbols_in_file(f)))
+        else:
+            pass
+
+    return symbols
+
+
+def get_symbols_in_file(file: Path) -> list[Symbol]:
+    try:
+        t: AST = ast.parse(file.read_text(), filename=file)
+    except SyntaxError as e:
+        # TODO better way to handle, exit code, error message
+        # or skip or reuse cached for that file?
+        print(e)
+        return []
+    return filerize(file, get_symbols_in_Module(t))
+
+
+def get_symbols_in_sources(
+    sources: Sequence[str], excludes: Sequence[str]
+) -> list[Symbol]:
+    """sources is a list of folder and/or files"""
+    exclude_matchers = [re.compile(i) for i in excludes]
+
+    # TODO change to path, also in passed-arg in loop then, twice!
+    def should_exclude(p: str) -> bool:
+        for m in exclude_matchers:
+            if m.fullmatch(p) is not None:
+                return True
+        return False
+
+    symbols: list[Symbol] = []
+    for source in sources:
+        if should_exclude(source):
+            continue
+        sourcep = pathlib.Path(source)
+        if sourcep.is_dir():
+            symbols.extend(get_symbols_in_folder(sourcep, should_exclude))
+        elif sourcep.is_file():
+            symbols.extend(get_symbols_in_file(sourcep))
+    return symbols
+
+
+@click.command()
+@click.argument("sources", nargs=-1, type=click.Path(exists=True))
+@click.option(
+    "--out",
+    "-o",
+    default="-",
+    help="output file or - for stdout",
+    show_default=True,
+)
+@click.option(
+    "--quiet/--no-quiet",
+    "-q/",
+    default=False,
+    help="suppress all output to stdout (except for --out=-)",
+    show_default=True,
+)
+@click.option(
+    "--fmt",
+    "-f",
+    default="human",
+    help="formats: human, ctags, vim-telescope",
+    show_default=True,
+)
+@click.option(
+    "excludes",
+    "--exclude",
+    "-e",
+    default=[],
+    multiple=True,
+    help="Regexps for paths to exlude. Can be used multiple times.",
+    # TODO it's not clear if it's on the full path, or on the path starting with the source entry
+)
+def main(
+    out: str, sources: Sequence[str], quiet: bool, fmt: str, excludes: Sequence[str]
+):
+    # TODO try the other click that stefan mentioned? shorter?
+
+    if len(sources) == 0:
+        sources = (".",)
+
+    if quiet:
+
+        def log(message: str, end: str = "\n"):
+            pass
+
+    else:
+
+        def log(message: str, end: str = "\n"):
+            print(message, end=end)
+
+    # TODO technically that means we can never output to a file called "-"
+    if out == "-":
+
+        def write_entries(entries: str):
+            print(entries)
+
+    else:
+
+        def write_entries(entries: str):
+            Path(out).write_text(entries)
+
+    dt = time.time()
+    log("scanning ...", end="")
+    symbols = get_symbols_in_sources(sources, excludes)
+    log(" found %d symbols (%d ms)" % (len(symbols), (time.time() - dt) * 1000))
+
+    match fmt:
+        case "human":
+            entries = create_human_entries(symbols)
+        case "ctags":
+            entries = create_tag_entries(symbols)
+        case "vim-telescope":
+            entries = create_vim_telescope_entries(symbols)
+        case _:
+            assert False, fmt
+    entries = "\n".join(entries)
+
+    write_entries(entries)
+
+
+if __name__ == "__main__":
+    main()
