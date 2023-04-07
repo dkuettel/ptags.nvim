@@ -23,12 +23,13 @@ import os
 import os.path
 import pathlib
 import re
+import sys
 import time
 from ast import AST
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, TextIO
 
 import click
 from tabulate import tabulate
@@ -108,38 +109,54 @@ def get_symbols_in_ClassDef(body: Sequence[ast.stmt]) -> list[Symbol]:
     return [j for i in body for j in get_symbols_in_Module(i)]
 
 
-def create_human_entries(symbols: Sequence[Symbol]) -> list[str]:
+def make_entries(fmt: str, symbols: Sequence[Symbol], out: TextIO):
+    match fmt:
+        case "human":
+            make_human_entries(symbols, out)
+        case "ctags":
+            make_tag_entries(symbols, out)
+        case "vim-telescope":
+            make_vim_telescope_entries(symbols, out)
+        case _:
+            assert False, fmt
+
+
+def make_human_entries(symbols: Sequence[Symbol], out: TextIO):
     headers = ["location", "kind", "name"]
     data = [[f"{s.file}:{s.line}", f"{s.kind}", f"{s.name}"] for s in symbols]
-    # TODO a bit unclean, make the outputters just produce a str?
-    return tabulate(data, headers=headers).splitlines()
+    out.write(tabulate(data, headers=headers))
+    out.write("\n")
 
 
-def create_tag_entries(symbols: Sequence[Symbol]) -> list[str]:
+def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
+    # NOTE from vim's documentation I'm not sure if that has to be first line,
+    # or still sorted, also not sure if I 'case-fold' sorted correctly
+    header = ["!_TAG_FILE_SORTED\t2\tcase-fold sorted"]
     entries = [
         '%s\t%s\t%d;" %s' % (i.name, i.file, i.line, i.kind)
         # TODO not nice here that s.name could be None, can we statically type this?
         for i in sorted(symbols, key=lambda s: (s.name or "").lower())
     ]
-    # from vim's documentation I'm not sure if that has to be the first line, or still sorted
-    # I'm also not sure I do 'case-fold sorted' correctly
-    entries.insert(0, "!_TAG_FILE_SORTED\t2\tcase-fold sorted")
-    return entries
+    out.write("\n".join(header + entries))
+    out.write("\n")
 
 
-def create_vim_telescope_entries(symbols: Sequence[Symbol]) -> list[str]:
-    return [
-        # TODO also here s.file and others could be None :/
-        "\x00".join(
-            [
-                s.name or "",
-                str(s.line or -1),
-                s.kind or "",
-                str(os.path.abspath(s.file or ".")),
-            ]
+def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
+    out.write(
+        "\n".join(
+            # TODO also here s.file and others could be None :/
+            "\x00".join(
+                [
+                    s.name or "",
+                    str(s.line or -1),
+                    s.kind or "",
+                    str(os.path.abspath(s.file or ".")),
+                ]
+            )
+            for s in symbols
         )
-        for s in symbols
-    ]
+    )
+    out.write("\n")
 
 
 def get_symbols_in_folder(
@@ -200,6 +217,16 @@ def get_symbols_in_sources(
     return symbols
 
 
+log_quiet = False
+
+
+def log(message: str, end: str = "\n"):
+    global log_quiet
+    if log_quiet:
+        return
+    print(message, end=end)
+
+
 @click.command()
 @click.argument("sources", nargs=-1, type=click.Path(exists=True))
 @click.option(
@@ -240,44 +267,21 @@ def main(
     if len(sources) == 0:
         sources = (".",)
 
-    if quiet:
-
-        def log(message: str, end: str = "\n"):
-            pass
-
-    else:
-
-        def log(message: str, end: str = "\n"):
-            print(message, end=end)
-
-    # TODO technically that means we can never output to a file called "-"
-    if out == "-":
-
-        def write_entries(entries: str):
-            print(entries)
-
-    else:
-
-        def write_entries(entries: str):
-            Path(out).write_text(entries)
+    global log_quiet
+    log_quiet = quiet
 
     dt = time.time()
     log("scanning ...", end="")
     symbols = get_symbols_in_sources(sources, excludes)
     log(" found %d symbols (%d ms)" % (len(symbols), (time.time() - dt) * 1000))
 
-    match fmt:
-        case "human":
-            entries = create_human_entries(symbols)
-        case "ctags":
-            entries = create_tag_entries(symbols)
-        case "vim-telescope":
-            entries = create_vim_telescope_entries(symbols)
+    match out:
+        # NOTE this means we dont support an output file that is actually named "-"
+        case "-":
+            make_entries(fmt, symbols, sys.stdout)
         case _:
-            assert False, fmt
-    entries = "\n".join(entries)
-
-    write_entries(entries)
+            with Path(out).open("wt") as f:
+                make_entries(fmt, symbols, f)
 
 
 if __name__ == "__main__":
