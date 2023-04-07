@@ -128,9 +128,6 @@ def get_symbols_in_ClassDef(
 def get_symbols_in_folder(
     folder: Path, scope: tuple[str, ...], should_exclude: Callable[[str], bool]
 ) -> list[Symbol]:
-    # TODO here need to think about pythonpath and base folder stuff
-    # how did it ever work with python/... as usual? python is not in the qualifiers?
-
     symbols: list[Symbol] = []
 
     for f in folder.iterdir():
@@ -182,7 +179,6 @@ def get_symbols_in_sources(
             continue
         sourcep = pathlib.Path(source)
         if sourcep.is_dir():
-            # TODO this is why python/** worked? because we gave it as a basefolder, instead of globbed expanded?
             symbols.extend(get_symbols_in_folder(sourcep, (), should_exclude))
         elif sourcep.is_file():
             symbols.extend(get_symbols_in_file(sourcep, ()))
@@ -247,8 +243,17 @@ def log(message: str, end: str = "\n"):
     print(message, end=end)
 
 
-@click.command()
-@click.argument("sources", nargs=-1, type=click.Path(exists=True))
+@click.command(
+    help="""
+        [SOURCES] are folders and files to search.
+        Note that they are each considered to be the root for qualified names.
+        The qualified names are all relative to the arguments you pass here.
+        For example, passing 'python/module/sub/file.py' will register things inside
+        'file.py' not qualified as 'module.sub'. For that you should pass 'python'
+        as a folder.
+    """,
+)
+@click.argument("sources", nargs=-1)
 @click.option(
     "--out",
     "-o",
