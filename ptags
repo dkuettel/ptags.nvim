@@ -7,11 +7,6 @@ tabulate==0.9.0
 ipython==8.11.0
 """
 
-# todo
-# - maybe https://pypi.org/project/parso/
-# - also treesitter might be able to recover?
-# - first just skip file, would be nice if we could at least get the tree up to error?
-
 from __future__ import annotations
 
 import ast
@@ -33,6 +28,7 @@ class Kind(Enum):
     function_def = "function"
     class_def = "class"
     variable = "variable"
+    error = "syntax-error"
 
 
 @dataclass(frozen=True)
@@ -142,14 +138,16 @@ def get_symbols_in_folder(
     return symbols
 
 
+# TODO what's the semantics here, should scope not be without file yet?
 def get_symbols_in_file(file: Path, scope: tuple[str, ...]) -> list[Symbol]:
     try:
         t: AST = ast.parse(file.read_text(), filename=file)
-    except SyntaxError as e:
-        # TODO better way to handle, exit code, error message
-        # or skip or reuse cached for that file?
-        print(e)
-        return []
+    except SyntaxError:
+        # TODO could we also have a cache of last time we parsed?
+        # TODO or use a parser that is more forgiving?
+        # - maybe https://pypi.org/project/parso/
+        # - also treesitter might be able to recover?
+        return [Symbol(scope, 0, Kind.error, file)]
     return get_symbols_in_Module(file, scope, t)
 
 
