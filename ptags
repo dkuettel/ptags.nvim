@@ -125,57 +125,6 @@ def get_symbols_in_ClassDef(
     return [j for i in body for j in get_symbols_in_Module(file, scope, i)]
 
 
-# TODO move all those below the parsing stuff
-def make_entries(fmt: str, symbols: Sequence[Symbol], out: TextIO):
-    match fmt:
-        case "human":
-            make_human_entries(symbols, out)
-        case "ctags":
-            make_tag_entries(symbols, out)
-        case "vim-telescope":
-            make_vim_telescope_entries(symbols, out)
-        case _:
-            assert False, fmt
-
-
-def make_human_entries(symbols: Sequence[Symbol], out: TextIO):
-    headers = ["location", "kind", "name"]
-    data = [[f"{s.file}:{s.line}", f"{s.kind_str}", f"{s.name}"] for s in symbols]
-    out.write(tabulate(data, headers=headers))
-    out.write("\n")
-
-
-def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
-    # NOTE from vim's documentation I'm not sure if that has to be first line,
-    # or still sorted, also not sure if I 'case-fold' sorted correctly
-    header = ["!_TAG_FILE_SORTED\t2\tcase-fold sorted"]
-    entries = [
-        '%s\t%s\t%d;" %s' % (i.name, i.file, i.line, i.kind_str)
-        # TODO not nice here that s.name could be None, can we statically type this?
-        for i in sorted(symbols, key=lambda s: (s.name or "").lower())
-    ]
-    out.write("\n".join(header + entries))
-    out.write("\n")
-
-
-def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
-    out.write(
-        "\n".join(
-            # TODO also here s.file and others could be None :/
-            "\x00".join(
-                [
-                    s.name,
-                    str(s.line or -1),
-                    s.kind_str,
-                    str(os.path.abspath(s.file or ".")),
-                ]
-            )
-            for s in symbols
-        )
-    )
-    out.write("\n")
-
-
 def get_symbols_in_folder(
     folder: Path, scope: tuple[str, ...], should_exclude: Callable[[str], bool]
 ) -> list[Symbol]:
@@ -238,6 +187,56 @@ def get_symbols_in_sources(
         elif sourcep.is_file():
             symbols.extend(get_symbols_in_file(sourcep, ()))
     return symbols
+
+
+def make_entries(fmt: str, symbols: Sequence[Symbol], out: TextIO):
+    match fmt:
+        case "human":
+            make_human_entries(symbols, out)
+        case "ctags":
+            make_tag_entries(symbols, out)
+        case "vim-telescope":
+            make_vim_telescope_entries(symbols, out)
+        case _:
+            assert False, fmt
+
+
+def make_human_entries(symbols: Sequence[Symbol], out: TextIO):
+    headers = ["location", "kind", "name"]
+    data = [[f"{s.file}:{s.line}", f"{s.kind_str}", f"{s.name}"] for s in symbols]
+    out.write(tabulate(data, headers=headers))
+    out.write("\n")
+
+
+def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
+    # NOTE from vim's documentation I'm not sure if that has to be first line,
+    # or still sorted, also not sure if I 'case-fold' sorted correctly
+    header = ["!_TAG_FILE_SORTED\t2\tcase-fold sorted"]
+    entries = [
+        '%s\t%s\t%d;" %s' % (i.name, i.file, i.line, i.kind_str)
+        # TODO not nice here that s.name could be None, can we statically type this?
+        for i in sorted(symbols, key=lambda s: (s.name or "").lower())
+    ]
+    out.write("\n".join(header + entries))
+    out.write("\n")
+
+
+def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
+    out.write(
+        "\n".join(
+            # TODO also here s.file and others could be None :/
+            "\x00".join(
+                [
+                    s.name,
+                    str(s.line or -1),
+                    s.kind_str,
+                    str(os.path.abspath(s.file or ".")),
+                ]
+            )
+            for s in symbols
+        )
+    )
+    out.write("\n")
 
 
 log_quiet = False
