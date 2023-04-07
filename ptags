@@ -214,8 +214,7 @@ def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
     header = ["!_TAG_FILE_SORTED\t2\tcase-fold sorted"]
     entries = [
         '%s\t%s\t%d;" %s' % (i.name, i.file, i.line, i.kind_str)
-        # TODO not nice here that s.name could be None, can we statically type this?
-        for i in sorted(symbols, key=lambda s: (s.name or "").lower())
+        for i in sorted(symbols, key=lambda s: s.name.lower())
     ]
     out.write("\n".join(header + entries))
     out.write("\n")
@@ -224,13 +223,12 @@ def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
 def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
     out.write(
         "\n".join(
-            # TODO also here s.file and others could be None :/
             "\x00".join(
                 [
                     s.name,
-                    str(s.line or -1),
+                    str(s.line),
                     s.kind_str,
-                    str(os.path.abspath(s.file or ".")),
+                    str(s.file),
                 ]
             )
             for s in symbols
@@ -284,6 +282,7 @@ def log(message: str, end: str = "\n"):
 def main(
     out: str, sources: Sequence[str], quiet: bool, fmt: str, excludes: Sequence[str]
 ):
+    # TODO arr still, typer could make this much shorter above
     if len(sources) == 0:
         sources = (".",)
 
