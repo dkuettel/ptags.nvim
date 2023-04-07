@@ -26,6 +26,7 @@ import time
 from ast import AST
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Callable, TextIO
 
@@ -33,16 +34,26 @@ import click
 from tabulate import tabulate
 
 
+class Kind(Enum):
+    function_def = "function"
+    class_def = "class"
+    variable = "variable"
+
+
 @dataclass(frozen=True)
 class Symbol(object):
     qualifiers: tuple[str, ...]
     line: int  # 1-based
-    kind: str  # TODO should that be enum?
+    kind: Kind
     file: Path
 
     @property
     def name(self) -> str:
         return ".".join(self.qualifiers)
+
+    @property
+    def kind_str(self) -> str:
+        return str(self.kind.value)
 
     def __str__(self):
         return "%s [%s]" % (self.name, self.kind)
@@ -56,13 +67,17 @@ def get_symbols_in_Module(
 
     class V(ast.NodeVisitor):
         def visit_FunctionDef(self, node: ast.FunctionDef):
-            symbols.append(Symbol(scope + (node.name,), node.lineno, "function", file))
+            symbols.append(
+                Symbol(scope + (node.name,), node.lineno, Kind.function_def, file)
+            )
             symbols.extend(
                 get_symbols_in_FunctionDef(file, scope + (node.name,), node.body)
             )
 
         def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(Symbol(scope + (node.name,), node.lineno, "class", file))
+            symbols.append(
+                Symbol(scope + (node.name,), node.lineno, Kind.class_def, file)
+            )
             symbols.extend(
                 get_symbols_in_ClassDef(file, scope + (node.name,), node.body)
             )
@@ -72,7 +87,7 @@ def get_symbols_in_Module(
                 for i in ast.walk(t):
                     if isinstance(i, ast.Name):
                         symbols.append(
-                            Symbol(scope + (i.id,), node.lineno, "variable", file)
+                            Symbol(scope + (i.id,), node.lineno, Kind.variable, file)
                         )
 
     V().visit(node)
@@ -87,7 +102,9 @@ def get_symbols_in_FunctionDef(
 
     class V(ast.NodeVisitor):
         def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(Symbol(scope + (node.name,), node.lineno, "class", file))
+            symbols.append(
+                Symbol(scope + (node.name,), node.lineno, Kind.class_def, file)
+            )
             symbols.extend(
                 get_symbols_in_ClassDef(file, scope + (node.name,), node.body)
             )
@@ -123,7 +140,7 @@ def make_entries(fmt: str, symbols: Sequence[Symbol], out: TextIO):
 
 def make_human_entries(symbols: Sequence[Symbol], out: TextIO):
     headers = ["location", "kind", "name"]
-    data = [[f"{s.file}:{s.line}", f"{s.kind}", f"{s.name}"] for s in symbols]
+    data = [[f"{s.file}:{s.line}", f"{s.kind_str}", f"{s.name}"] for s in symbols]
     out.write(tabulate(data, headers=headers))
     out.write("\n")
 
@@ -133,7 +150,7 @@ def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
     # or still sorted, also not sure if I 'case-fold' sorted correctly
     header = ["!_TAG_FILE_SORTED\t2\tcase-fold sorted"]
     entries = [
-        '%s\t%s\t%d;" %s' % (i.name, i.file, i.line, i.kind)
+        '%s\t%s\t%d;" %s' % (i.name, i.file, i.line, i.kind_str)
         # TODO not nice here that s.name could be None, can we statically type this?
         for i in sorted(symbols, key=lambda s: (s.name or "").lower())
     ]
@@ -147,9 +164,9 @@ def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
             # TODO also here s.file and others could be None :/
             "\x00".join(
                 [
-                    s.name or "",
+                    s.name,
                     str(s.line or -1),
-                    s.kind or "",
+                    s.kind_str,
                     str(os.path.abspath(s.file or ".")),
                 ]
             )
