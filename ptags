@@ -16,7 +16,7 @@ ipython==8.11.0
 
 from __future__ import annotations
 
-import ast  # https://greentreesnakes.readthedocs.io/en/latest/index.html
+import ast
 import os
 import os.path
 import pathlib
@@ -35,65 +35,61 @@ from tabulate import tabulate
 
 @dataclass(frozen=True)
 class Symbol(object):
-    name: str
+    qualifiers: tuple[str, ...]
     line: int  # 1-based
-    kind: str
+    kind: str  # TODO should that be enum?
     file: Path
 
-    def qualified(self, qualifier: str) -> Symbol:
-        return Symbol(
-            f"{qualifier}.{self.name}",
-            self.line,
-            self.kind,
-            self.file,
-        )
+    @property
+    def name(self) -> str:
+        return ".".join(self.qualifiers)
 
     def __str__(self):
         return "%s [%s]" % (self.name, self.kind)
 
 
-def symbols_qualified(symbols: Sequence[Symbol], qualifier: str) -> list[Symbol]:
-    return [s.qualified(qualifier) for s in symbols]
-
-
-def get_symbols_in_Module(file: Path, node: AST) -> list[Symbol]:
+def get_symbols_in_Module(
+    file: Path, scope: tuple[str, ...], node: AST
+) -> list[Symbol]:
 
     symbols: list[Symbol] = []
 
     class V(ast.NodeVisitor):
         def visit_FunctionDef(self, node: ast.FunctionDef):
-            symbols.append(Symbol(node.name, node.lineno, "function", file))
+            symbols.append(Symbol(scope + (node.name,), node.lineno, "function", file))
             symbols.extend(
-                symbols_qualified(
-                    get_symbols_in_FunctionDef(file, node.body), node.name
-                )
+                get_symbols_in_FunctionDef(file, scope + (node.name,), node.body)
             )
 
         def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(Symbol(node.name, node.lineno, "class", file))
+            symbols.append(Symbol(scope + (node.name,), node.lineno, "class", file))
             symbols.extend(
-                symbols_qualified(get_symbols_in_ClassDef(file, node.body), node.name)
+                get_symbols_in_ClassDef(file, scope + (node.name,), node.body)
             )
 
         def visit_Assign(self, node: ast.Assign):
             for t in node.targets:
                 for i in ast.walk(t):
                     if isinstance(i, ast.Name):
-                        symbols.append(Symbol(i.id, node.lineno, "variable", file))
+                        symbols.append(
+                            Symbol(scope + (i.id,), node.lineno, "variable", file)
+                        )
 
     V().visit(node)
     return symbols
 
 
-def get_symbols_in_FunctionDef(file: Path, body: Sequence[ast.stmt]) -> list[Symbol]:
+def get_symbols_in_FunctionDef(
+    file: Path, scope: tuple[str, ...], body: Sequence[ast.stmt]
+) -> list[Symbol]:
 
     symbols: list[Symbol] = []
 
     class V(ast.NodeVisitor):
         def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(Symbol(node.name, node.lineno, "class", file))
+            symbols.append(Symbol(scope + (node.name,), node.lineno, "class", file))
             symbols.extend(
-                symbols_qualified(get_symbols_in_ClassDef(file, node.body), node.name)
+                get_symbols_in_ClassDef(file, scope + (node.name,), node.body)
             )
 
     # TODO is this necessary? cant we just do it on body?
@@ -106,10 +102,13 @@ def get_symbols_in_FunctionDef(file: Path, body: Sequence[ast.stmt]) -> list[Sym
     return symbols
 
 
-def get_symbols_in_ClassDef(file: Path, body: Sequence[ast.stmt]) -> list[Symbol]:
-    return [j for i in body for j in get_symbols_in_Module(file, i)]
+def get_symbols_in_ClassDef(
+    file: Path, scope: tuple[str, ...], body: Sequence[ast.stmt]
+) -> list[Symbol]:
+    return [j for i in body for j in get_symbols_in_Module(file, scope, i)]
 
 
+# TODO move all those below the parsing stuff
 def make_entries(fmt: str, symbols: Sequence[Symbol], out: TextIO):
     match fmt:
         case "human":
@@ -161,8 +160,10 @@ def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
 
 
 def get_symbols_in_folder(
-    folder: Path, should_exclude: Callable[[str], bool]
+    folder: Path, scope: tuple[str, ...], should_exclude: Callable[[str], bool]
 ) -> list[Symbol]:
+    # TODO here need to think about pythonpath and base folder stuff
+    # how did it ever work with python/... as usual? python is not in the qualifiers?
 
     symbols: list[Symbol] = []
 
@@ -170,22 +171,20 @@ def get_symbols_in_folder(
         if should_exclude(str(f)):
             continue
         if f.is_dir():
-            symbols.extend(
-                symbols_qualified(get_symbols_in_folder(f, should_exclude), f.name)
-            )
+            symbols.extend(get_symbols_in_folder(f, scope + (f.name,), should_exclude))
         elif f.name == "__init__.py":
-            symbols.extend(get_symbols_in_file(f))
+            symbols.extend(get_symbols_in_file(f, scope))
         elif f.suffix == ".py":
             # TODO this way we will miss any hash-banged python files
             # unless they are listed explicitely I think
-            symbols.extend(symbols_qualified(get_symbols_in_file(f), f.stem))
+            symbols.extend(get_symbols_in_file(f, scope + (f.stem,)))
         else:
             pass
 
     return symbols
 
 
-def get_symbols_in_file(file: Path) -> list[Symbol]:
+def get_symbols_in_file(file: Path, scope: tuple[str, ...]) -> list[Symbol]:
     try:
         t: AST = ast.parse(file.read_text(), filename=file)
     except SyntaxError as e:
@@ -193,11 +192,13 @@ def get_symbols_in_file(file: Path) -> list[Symbol]:
         # or skip or reuse cached for that file?
         print(e)
         return []
-    return get_symbols_in_Module(file, t)
+    return get_symbols_in_Module(file, scope, t)
 
 
 def get_symbols_in_sources(
-    sources: Sequence[str], excludes: Sequence[str]
+    # TODO change that to Path
+    sources: Sequence[str],
+    excludes: Sequence[str],
 ) -> list[Symbol]:
     """sources is a list of folder and/or files"""
     exclude_matchers = [re.compile(i) for i in excludes]
@@ -215,9 +216,10 @@ def get_symbols_in_sources(
             continue
         sourcep = pathlib.Path(source)
         if sourcep.is_dir():
-            symbols.extend(get_symbols_in_folder(sourcep, should_exclude))
+            # TODO this is why python/** worked? because we gave it as a basefolder, instead of globbed expanded?
+            symbols.extend(get_symbols_in_folder(sourcep, (), should_exclude))
         elif sourcep.is_file():
-            symbols.extend(get_symbols_in_file(sourcep))
+            symbols.extend(get_symbols_in_file(sourcep, ()))
     return symbols
 
 
