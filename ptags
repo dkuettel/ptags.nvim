@@ -5,23 +5,25 @@
 click==8.1.3
 tabulate==0.9.0
 ipython==8.11.0
+tree_sitter==0.20.1
 """
 
 from __future__ import annotations
 
-import ast
+import functools
 import re
 import sys
 import time
-from ast import AST
 from collections.abc import Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Callable, TextIO
+from typing import Callable, Optional, TextIO
 
 import click
 from tabulate import tabulate
+from tree_sitter import Language, Node, Parser
+from tree_sitter.binding import Query
 
 
 class Kind(Enum):
@@ -50,72 +52,6 @@ class Symbol(object):
         return "%s [%s]" % (self.name, self.kind)
 
 
-def get_symbols_in_Module(
-    file: Path, scope: tuple[str, ...], node: AST
-) -> list[Symbol]:
-
-    symbols: list[Symbol] = []
-
-    class V(ast.NodeVisitor):
-        def visit_FunctionDef(self, node: ast.FunctionDef):
-            symbols.append(
-                Symbol(scope + (node.name,), node.lineno, Kind.function_def, file)
-            )
-            symbols.extend(
-                get_symbols_in_FunctionDef(file, scope + (node.name,), node.body)
-            )
-
-        def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(
-                Symbol(scope + (node.name,), node.lineno, Kind.class_def, file)
-            )
-            symbols.extend(
-                get_symbols_in_ClassDef(file, scope + (node.name,), node.body)
-            )
-
-        def visit_Assign(self, node: ast.Assign):
-            for t in node.targets:
-                for i in ast.walk(t):
-                    if isinstance(i, ast.Name):
-                        symbols.append(
-                            Symbol(scope + (i.id,), node.lineno, Kind.variable, file)
-                        )
-
-    V().visit(node)
-    return symbols
-
-
-def get_symbols_in_FunctionDef(
-    file: Path, scope: tuple[str, ...], body: Sequence[ast.stmt]
-) -> list[Symbol]:
-
-    symbols: list[Symbol] = []
-
-    class V(ast.NodeVisitor):
-        def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(
-                Symbol(scope + (node.name,), node.lineno, Kind.class_def, file)
-            )
-            symbols.extend(
-                get_symbols_in_ClassDef(file, scope + (node.name,), node.body)
-            )
-
-    # TODO is this necessary? cant we just do it on body?
-    # the documentation is not clear even if it goes recursively
-    # ah that would work if we didnt pass in body.body
-    for i in body:
-        # TODO and if we need the loop, dont recreate class
-        V().visit(i)
-
-    return symbols
-
-
-def get_symbols_in_ClassDef(
-    file: Path, scope: tuple[str, ...], body: Sequence[ast.stmt]
-) -> list[Symbol]:
-    return [j for i in body for j in get_symbols_in_Module(file, scope, i)]
-
-
 def get_symbols_in_folder(
     folder: Path, scope: tuple[str, ...], should_exclude: Callable[[Path], bool]
 ) -> list[Symbol]:
@@ -138,17 +74,84 @@ def get_symbols_in_folder(
     return symbols
 
 
+ts_query = """
+(function_definition name: (identifier) @function_name)
+(class_definition name: (identifier) @class_name)
+(assignment left: (identifier) @variable_name)
+"""
+
+
+def kind_from_capture_name(name: str) -> Kind:
+    # TODO we could make that the name of the Kind to start with in captures, direct access Kind[...]
+    match name:
+        case "function_name":
+            return Kind.function_def
+        case "class_name":
+            return Kind.class_def
+        case "variable_name":
+            return Kind.variable
+        case _:
+            assert False
+
+
+@functools.cache
+def ts_setup() -> tuple[Parser, Query]:
+    Language.build_library("./my-languages.so", ["tree-sitter-python"])
+    language = Language("./my-languages.so", "python")
+    parser = Parser()
+    parser.set_language(language)
+    query = language.query(ts_query)
+    return parser, query
+
+
+def parse_and_capture(file: Path) -> list[tuple[Node, str]]:
+    parser, query = ts_setup()
+    source = file.read_text("utf8").encode("utf8")
+    tree = parser.parse(source)
+    return query.captures(tree.root_node)
+
+
+def ts_qualify(node: Optional[Node]) -> tuple[str, ...]:
+    path: list[str] = []
+    while node is not None:
+        match node.type:
+            case "identifier":
+                # TODO that's only for the first, add that unconditionally before the climb
+                path.append(node.text.decode("utf8"))
+            case "block":
+                assert node.parent is not None
+                maybe_name = node.parent.child_by_field_name("name")
+                if maybe_name is not None:
+                    path.append(maybe_name.text.decode("utf8"))
+            case _:
+                pass
+        node = node.parent
+    return tuple(reversed(path))
+
+
 # TODO what's the semantics here, should scope not be without file yet?
+# probably not because of __init__.py, but can be done differently
 def get_symbols_in_file(file: Path, scope: tuple[str, ...]) -> list[Symbol]:
-    try:
-        t: AST = ast.parse(file.read_text(), filename=file)
-    except SyntaxError:
-        # TODO could we also have a cache of last time we parsed?
-        # TODO or use a parser that is more forgiving?
-        # - maybe https://pypi.org/project/parso/
-        # - also treesitter might be able to recover?
-        return [Symbol(scope, 0, Kind.error, file)]
-    return get_symbols_in_Module(file, scope, t)
+    candidates = parse_and_capture(file)
+    # TODO capture error nodes and add to results? how to warn that results are incomplete?
+    symbols: list[Symbol] = []
+    for node, name in candidates:
+        qualifiers = ts_qualify(node)
+        match name:
+            case "variable_name":
+                if len(qualifiers) > 0:
+                    continue
+            case _:
+                pass
+        symbols.append(
+            Symbol(
+                scope + qualifiers,
+                node.start_point[0] + 1,
+                kind_from_capture_name(name),
+                file,
+            )
+        )
+    return symbols
 
 
 def get_symbols_in_sources(
