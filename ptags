@@ -30,7 +30,6 @@ class Kind(Enum):
     function_def = "function"
     class_def = "class"
     variable = "variable"
-    error = "syntax-error"
 
 
 @dataclass(frozen=True)
@@ -75,23 +74,10 @@ def get_symbols_in_folder(
 
 
 ts_query = """
-(function_definition name: (identifier) @function_name)
-(class_definition name: (identifier) @class_name)
-(assignment left: (identifier) @variable_name)
+(function_definition name: (identifier) @function_def)
+(class_definition name: (identifier) @class_def)
+(assignment left: (identifier) @variable)
 """
-
-
-def kind_from_capture_name(name: str) -> Kind:
-    # TODO we could make that the name of the Kind to start with in captures, direct access Kind[...]
-    match name:
-        case "function_name":
-            return Kind.function_def
-        case "class_name":
-            return Kind.class_def
-        case "variable_name":
-            return Kind.variable
-        case _:
-            assert False
 
 
 @functools.cache
@@ -137,8 +123,9 @@ def get_symbols_in_file(file: Path, scope: tuple[str, ...]) -> list[Symbol]:
     symbols: list[Symbol] = []
     for node, name in candidates:
         qualifiers = ts_qualify(node)
-        match name:
-            case "variable_name":
+        kind = Kind[name]
+        match kind:
+            case Kind.variable:
                 if len(qualifiers) > 0:
                     continue
             case _:
@@ -147,7 +134,7 @@ def get_symbols_in_file(file: Path, scope: tuple[str, ...]) -> list[Symbol]:
             Symbol(
                 scope + qualifiers,
                 node.start_point[0] + 1,
-                kind_from_capture_name(name),
+                kind,
                 file,
             )
         )
