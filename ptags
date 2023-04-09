@@ -51,30 +51,6 @@ class Symbol(object):
         return "%s [%s]" % (self.name, self.kind)
 
 
-def get_symbols_in_folder(
-    folder: Path, scope: tuple[str, ...], should_exclude: Callable[[Path], bool]
-) -> list[Symbol]:
-    # TODO could just start with a **/*.py glob anyway and a basefolder for proper naming
-    # easy to understand, easy to parallelize if we need to
-    symbols: list[Symbol] = []
-
-    for f in folder.iterdir():
-        if should_exclude(f):
-            continue
-        if f.is_dir():
-            symbols.extend(get_symbols_in_folder(f, scope + (f.name,), should_exclude))
-        elif f.name == "__init__.py":
-            symbols.extend(get_symbols_in_file(f, scope))
-        elif f.suffix == ".py":
-            # NOTE this way we will miss hash-banged python files
-            # (unless they are given explicitely as a file)
-            symbols.extend(get_symbols_in_file(f, scope + (f.stem,)))
-        else:
-            pass
-
-    return symbols
-
-
 def get_ts_query_for_kind(kind: Kind) -> str:
     match kind:
         case kind.FUNCTION:
@@ -142,6 +118,30 @@ def get_symbols_in_file(file: Path, file_scope: tuple[str, ...]) -> list[Symbol]
         for node, name in candidates
     ]
     return [s for s in maybe_symbols if s is not None]
+
+
+def get_symbols_in_folder(
+    folder: Path, scope: tuple[str, ...], should_exclude: Callable[[Path], bool]
+) -> list[Symbol]:
+    # TODO could just start with a **/*.py glob anyway and a basefolder for proper naming
+    # easy to understand, easy to parallelize if we need to
+    symbols: list[Symbol] = []
+
+    for f in folder.iterdir():
+        if should_exclude(f):
+            continue
+        if f.is_dir():
+            symbols.extend(get_symbols_in_folder(f, scope + (f.name,), should_exclude))
+        elif f.name == "__init__.py":
+            symbols.extend(get_symbols_in_file(f, scope))
+        elif f.suffix == ".py":
+            # NOTE this way we will miss hash-banged python files
+            # (unless they are given explicitely as a file)
+            symbols.extend(get_symbols_in_file(f, scope + (f.stem,)))
+        else:
+            pass
+
+    return symbols
 
 
 def get_symbols_in_sources(
