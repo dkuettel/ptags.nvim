@@ -27,9 +27,9 @@ from tree_sitter.binding import Query
 
 
 class Kind(Enum):
-    function_def = "function"
-    class_def = "class"
-    variable = "variable"
+    FUNCTION = "function"
+    CLASS = "class"
+    VARIABLE = "variable"
 
 
 @dataclass(frozen=True)
@@ -75,11 +75,18 @@ def get_symbols_in_folder(
     return symbols
 
 
-ts_query = """
-(function_definition name: (identifier) @function_def)
-(class_definition name: (identifier) @class_def)
-(assignment left: (identifier) @variable)
-"""
+def get_ts_query_for_kind(kind: Kind) -> str:
+    match kind:
+        case kind.FUNCTION:
+            return f"(function_definition name: (identifier) @{kind.value})"
+        case kind.CLASS:
+            return f"(class_definition name: (identifier) @{kind.value})"
+        case kind.VARIABLE:
+            return f"(assignment left: (identifier) @{kind.value})"
+
+
+def get_ts_queries() -> str:
+    return "\n".join(get_ts_query_for_kind(k) for k in Kind)
 
 
 @functools.cache
@@ -88,7 +95,7 @@ def ts_setup() -> tuple[Parser, Query]:
     language = Language("./my-languages.so", "python")
     parser = Parser()
     parser.set_language(language)
-    query = language.query(ts_query)
+    query = language.query(get_ts_queries())
     return parser, query
 
 
@@ -116,8 +123,8 @@ def get_symbol_from_capture(
 ) -> Optional[Symbol]:
     identifier = node.text.decode("utf8")
     scope = scope_from_node(node)
-    kind = Kind[name]
-    if kind is Kind.variable and len(scope) > 0:
+    kind = Kind(name)
+    if kind is Kind.VARIABLE and len(scope) > 0:
         return None
     return Symbol(
         file_scope + scope + (identifier,),
