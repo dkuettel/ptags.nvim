@@ -8,3 +8,16 @@
 - maybe make a fzf mode anyway, don't have to follow ctags format anymore
     - make different formats better, or different subcommands? for streaming and stuff?
 - switch to python3.7
+
+- make it use a dedicated pipx-like or with-python venv?
+    - so we go with most recent
+    - but any 3.x is supported for parsing
+    - pipx-like will be nice for people to start using it
+    - could work both from local, even editable? but also for pip
+
+- of course we still got problems
+    - any file that has a syntax error kills everything
+    - first skip it?
+    - second see if we could keep previous output?
+    - third see if we can remove a few lines and still parse?
+    - fourth any forgiving parsers?
