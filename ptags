@@ -82,26 +82,42 @@ def parse_and_capture(file: Path) -> list[tuple[Node, str]]:
     return query.captures(tree.root_node)
 
 
-def scope_from_node(node: Node) -> tuple[str, ...]:
-    scope: list[str] = []
+def named_parent_block_nodes_from_node(node: Node) -> tuple[list[str], list[Node]]:
+    names: list[str] = []
+    nodes: list[Node] = []
     at = node.parent
     while at is not None:
         if at.type == "block" and at.parent is not None:
             maybe_name = at.parent.child_by_field_name("name")
             if maybe_name is not None:
-                scope.append(maybe_name.text.decode("utf8"))
+                names.append(maybe_name.text.decode("utf8"))
+                nodes.append(at.parent)
         at = at.parent
-    return tuple(reversed(scope))
+    return names, nodes
 
 
 def get_symbol_from_capture(
     node: Node, name: str, file: Path, file_scope: tuple[str, ...]
 ) -> Optional[Symbol]:
+
     identifier = node.text.decode("utf8")
-    scope = scope_from_node(node)
     kind = Kind(name)
-    if kind is Kind.VARIABLE and len(scope) > 0:
-        return None
+    parent_names, parents = named_parent_block_nodes_from_node(node)
+
+    match kind:
+        case Kind.FUNCTION:
+            pass
+        case Kind.CLASS:
+            pass
+        case Kind.VARIABLE:
+            for n in parents:
+                if n.type == "function_definition":
+                    return None
+                if n.type == "class_definition":
+                    break
+
+    scope = tuple(reversed(parent_names))
+
     return Symbol(
         file_scope + scope + (identifier,),
         node.start_point[0] + 1,
