@@ -126,7 +126,7 @@ def get_scope_from_file(file: Path, base: Path) -> tuple[str, ...]:
         case "__init__.py":
             return tuple(parts)
         case _:
-            return tuple(parts + [file.name])
+            return tuple(parts + [file.stem])
 
 
 def get_symbols_in_sources(sources: Sequence[Path]) -> list[Symbol]:
