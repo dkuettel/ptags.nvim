@@ -11,14 +11,13 @@ tree_sitter==0.20.1
 from __future__ import annotations
 
 import functools
-import re
 import sys
 import time
 from collections.abc import Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional, TextIO
+from typing import Optional, TextIO
 
 import click
 from tabulate import tabulate
@@ -120,18 +119,14 @@ def get_symbols_in_file(file: Path, file_scope: tuple[str, ...]) -> list[Symbol]
     return [s for s in maybe_symbols if s is not None]
 
 
-def get_symbols_in_folder(
-    folder: Path, scope: tuple[str, ...], should_exclude: Callable[[Path], bool]
-) -> list[Symbol]:
+def get_symbols_in_folder(folder: Path, scope: tuple[str, ...]) -> list[Symbol]:
     # TODO could just start with a **/*.py glob anyway and a basefolder for proper naming
     # easy to understand, easy to parallelize if we need to
     symbols: list[Symbol] = []
 
     for f in folder.iterdir():
-        if should_exclude(f):
-            continue
         if f.is_dir():
-            symbols.extend(get_symbols_in_folder(f, scope + (f.name,), should_exclude))
+            symbols.extend(get_symbols_in_folder(f, scope + (f.name,)))
         elif f.name == "__init__.py":
             symbols.extend(get_symbols_in_file(f, scope))
         elif f.suffix == ".py":
@@ -144,25 +139,12 @@ def get_symbols_in_folder(
     return symbols
 
 
-def get_symbols_in_sources(
-    sources: Set[Path],
-    excludes: Sequence[str],
-) -> list[Symbol]:
+def get_symbols_in_sources(sources: Set[Path]) -> list[Symbol]:
     """sources is a list of folder and/or files"""
-    exclude_matchers = [re.compile(i) for i in excludes]
-
-    def should_exclude(p: Path) -> bool:
-        for m in exclude_matchers:
-            if m.fullmatch(str(p)) is not None:
-                return True
-        return False
-
     symbols: list[Symbol] = []
     for source in sources:
-        if should_exclude(source):
-            continue
         if source.is_dir():
-            symbols.extend(get_symbols_in_folder(source, (), should_exclude))
+            symbols.extend(get_symbols_in_folder(source, ()))
         elif source.is_file():
             symbols.extend(get_symbols_in_file(source, ()))
     return symbols
@@ -258,20 +240,7 @@ def log(message: str, end: str = "\n"):
     help="formats: human, ctags, vim-telescope",
     show_default=True,
 )
-@click.option(
-    "excludes",
-    "--exclude",
-    "-e",
-    default=[],
-    multiple=True,
-    help="Regexps for paths to exlude. Can be used multiple times.",
-    # TODO it's not clear if it's on the full path, or on the path starting with the source entry
-    # TODO could we make it a glob, and just find all with glob and remove from set?
-    # not so easy, because we do it recursively
-)
-def main(
-    out: str, sources: Sequence[str], quiet: bool, fmt: str, excludes: Sequence[str]
-):
+def main(out: str, sources: Sequence[str], quiet: bool, fmt: str):
     # TODO arr still, typer could make this much shorter above
     if len(sources) == 0:
         paths = {Path(".")}
@@ -283,7 +252,7 @@ def main(
 
     dt = time.time()
     log("scanning ...", end="")
-    symbols = get_symbols_in_sources(paths, excludes)
+    symbols = get_symbols_in_sources(paths)
     log(" found %d symbols (%d ms)" % (len(symbols), (time.time() - dt) * 1000))
 
     match out:
