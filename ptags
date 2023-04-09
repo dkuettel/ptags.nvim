@@ -66,8 +66,9 @@ def get_ts_queries() -> str:
 
 @functools.cache
 def ts_setup() -> tuple[Parser, Query]:
-    Language.build_library("./my-languages.so", ["tree-sitter-python"])
-    language = Language("./my-languages.so", "python")
+    so_file = Path(__file__).parent.resolve() / "tree-sitter.so"
+    Language.build_library(str(so_file), ["tree-sitter-python"])
+    language = Language(str(so_file), "python")
     parser = Parser()
     parser.set_language(language)
     query = language.query(get_ts_queries())
