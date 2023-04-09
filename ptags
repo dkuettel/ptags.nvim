@@ -54,6 +54,8 @@ class Symbol(object):
 def get_symbols_in_folder(
     folder: Path, scope: tuple[str, ...], should_exclude: Callable[[Path], bool]
 ) -> list[Symbol]:
+    # TODO could just start with a **/*.py glob anyway and a basefolder for proper naming
+    # easy to understand, easy to parallelize if we need to
     symbols: list[Symbol] = []
 
     for f in folder.iterdir():
@@ -92,53 +94,47 @@ def ts_setup() -> tuple[Parser, Query]:
 
 def parse_and_capture(file: Path) -> list[tuple[Node, str]]:
     parser, query = ts_setup()
-    source = file.read_text("utf8").encode("utf8")
+    source = file.read_text().encode("utf8")
     tree = parser.parse(source)
     return query.captures(tree.root_node)
 
 
-def ts_qualify(node: Optional[Node]) -> tuple[str, ...]:
-    path: list[str] = []
-    while node is not None:
-        match node.type:
-            case "identifier":
-                # TODO that's only for the first, add that unconditionally before the climb
-                path.append(node.text.decode("utf8"))
-            case "block":
-                assert node.parent is not None
-                maybe_name = node.parent.child_by_field_name("name")
-                if maybe_name is not None:
-                    path.append(maybe_name.text.decode("utf8"))
-            case _:
-                pass
-        node = node.parent
-    return tuple(reversed(path))
+def scope_from_node(node: Node) -> tuple[str, ...]:
+    scope: list[str] = []
+    at = node.parent
+    while at is not None:
+        if at.type == "block" and at.parent is not None:
+            maybe_name = at.parent.child_by_field_name("name")
+            if maybe_name is not None:
+                scope.append(maybe_name.text.decode("utf8"))
+        at = at.parent
+    return tuple(reversed(scope))
 
 
-# TODO what's the semantics here, should scope not be without file yet?
-# probably not because of __init__.py, but can be done differently
-def get_symbols_in_file(file: Path, scope: tuple[str, ...]) -> list[Symbol]:
-    candidates = parse_and_capture(file)
+def get_symbol_from_capture(
+    node: Node, name: str, file: Path, file_scope: tuple[str, ...]
+) -> Optional[Symbol]:
+    identifier = node.text.decode("utf8")
+    scope = scope_from_node(node)
+    kind = Kind[name]
+    if kind is Kind.variable and len(scope) > 0:
+        return None
+    return Symbol(
+        file_scope + scope + (identifier,),
+        node.start_point[0] + 1,
+        kind,
+        file,
+    )
+
+
+def get_symbols_in_file(file: Path, file_scope: tuple[str, ...]) -> list[Symbol]:
     # TODO capture error nodes and add to results? how to warn that results are incomplete?
-    symbols: list[Symbol] = []
-    for node, name in candidates:
-        qualifiers = ts_qualify(node)
-        kind = Kind[name]
-        match kind:
-            case Kind.variable:
-                if len(qualifiers) > 0:
-                    continue
-            case _:
-                pass
-        symbols.append(
-            Symbol(
-                scope + qualifiers,
-                node.start_point[0] + 1,
-                kind,
-                file,
-            )
-        )
-    return symbols
+    candidates = parse_and_capture(file)
+    maybe_symbols = [
+        get_symbol_from_capture(node, name, file, file_scope)
+        for node, name in candidates
+    ]
+    return [s for s in maybe_symbols if s is not None]
 
 
 def get_symbols_in_sources(
