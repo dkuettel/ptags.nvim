@@ -1,6 +1,3 @@
-- how to make it available for people?
-    - symlink issue still there
-    - pipx could work, if we make it build-tooled
-    - but what about offering vim integration, doesnt work well with pipx
-    - so people need to clone anyway?
-- make it truly iterable, first check on larger code base if speed is an issue
+o but then how/where to check out ptags? as a plugin for nvim?
+    - and then things have to be in ./lua, not nvim/lua ... doesnt quite fit
+    o ok pragmatic, make it an nvim plugin, main use-case anyway
