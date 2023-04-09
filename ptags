@@ -2,7 +2,7 @@
 # pyright: strict
 
 """! python3.10 requirements
-click==8.1.3
+typer==0.7.0
 tabulate==0.9.0
 ipython==8.11.0
 tree_sitter==0.20.1
@@ -12,14 +12,13 @@ from __future__ import annotations
 
 import functools
 import sys
-import time
-from collections.abc import Sequence, Set
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Optional, TextIO
 
-import click
+import typer
 from tabulate import tabulate
 from tree_sitter import Language, Node, Parser
 from tree_sitter.binding import Query
@@ -129,7 +128,7 @@ def get_scope_from_file(file: Path, base: Path) -> tuple[str, ...]:
             return tuple(parts + [file.name])
 
 
-def get_symbols_in_sources(sources: Set[Path]) -> list[Symbol]:
+def get_symbols_in_sources(sources: Sequence[Path]) -> list[Symbol]:
     """sources is a list of folder and/or files"""
     symbols: list[Symbol] = []
     for source in sources:
@@ -143,23 +142,27 @@ def get_symbols_in_sources(sources: Set[Path]) -> list[Symbol]:
     return symbols
 
 
-def make_entries(fmt: str, symbols: Sequence[Symbol], out: TextIO):
-    match fmt:
-        case "human":
+class Format(str, Enum):
+    human = "human"
+    ctags = "ctags"
+    telescope = "telescope"
+
+
+def make_entries(format: Format, symbols: Sequence[Symbol], out: TextIO):
+    match format:
+        case Format.human:
             make_human_entries(symbols, out)
-        case "ctags":
+        case Format.ctags:
             make_tag_entries(symbols, out)
-        case "vim-telescope":
-            make_vim_telescope_entries(symbols, out)
-        case _:
-            assert False, fmt
+        case Format.telescope:
+            make_telescope_entries(symbols, out)
 
 
 def make_human_entries(symbols: Sequence[Symbol], out: TextIO):
     headers = ["location", "kind", "name"]
     data = [[f"{s.file}:{s.line}", f"{s.kind_str}", f"{s.name}"] for s in symbols]
-    out.write(tabulate(data, headers=headers))
-    out.write("\n")
+    out.write(tabulate(data, headers=headers) + "\n")
+    out.write(f"Found {len(symbols)} symbols.\n")
 
 
 def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
@@ -174,7 +177,7 @@ def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
     out.write("\n")
 
 
-def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
+def make_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
     out.write(
         "\n".join(
             "\x00".join(
@@ -191,71 +194,10 @@ def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
     out.write("\n")
 
 
-log_quiet = False
-
-
-def log(message: str, end: str = "\n"):
-    global log_quiet
-    if log_quiet:
-        return
-    print(message, end=end)
-
-
-@click.command(
-    help="""
-        [SOURCES] are folders and files to search.
-        Note that they are each considered to be the root for qualified names.
-        The qualified names are all relative to the arguments you pass here.
-        For example, passing 'python/module/sub/file.py' will register things inside
-        'file.py' not qualified as 'module.sub'. For that you should pass 'python'
-        as a folder.
-    """,
-)
-@click.argument("sources", nargs=-1)
-@click.option(
-    "--out",
-    "-o",
-    default="-",
-    help="output file or - for stdout",
-    show_default=True,
-)
-@click.option(
-    "--quiet/--no-quiet",
-    "-q/",
-    default=False,
-    help="suppress all output to stdout (except for --out=-)",
-    show_default=True,
-)
-@click.option(
-    "--fmt",
-    "-f",
-    default="human",
-    help="formats: human, ctags, vim-telescope",
-    show_default=True,
-)
-def main(out: str, sources: Sequence[str], quiet: bool, fmt: str):
-    # TODO arr still, typer could make this much shorter above
-    if len(sources) == 0:
-        paths = {Path(".")}
-    else:
-        paths = {Path(s) for s in sources}
-
-    global log_quiet
-    log_quiet = quiet
-
-    dt = time.time()
-    log("scanning ...", end="")
-    symbols = get_symbols_in_sources(paths)
-    log(" found %d symbols (%d ms)" % (len(symbols), (time.time() - dt) * 1000))
-
-    match out:
-        # NOTE this means we dont support an output file that is actually named "-"
-        case "-":
-            make_entries(fmt, symbols, sys.stdout)
-        case _:
-            with Path(out).open("wt") as f:
-                make_entries(fmt, symbols, f)
+def main(sources: list[Path], format: Format = Format.human):
+    symbols = get_symbols_in_sources(sources)
+    make_entries(format, symbols, sys.stdout)
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)
