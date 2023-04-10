@@ -1,0 +1,9 @@
+#!/bin/zsh
+set -eu -o pipefail
+
+base=${0:a:h}
+cd $base
+
+rm -rf $base/.venv
+python3.10 -m venv $base/.venv
+$base/.venv/bin/pip install -r python/requirements.txt
