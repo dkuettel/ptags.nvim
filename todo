@@ -1,3 +1,20 @@
-o but then how/where to check out ptags? as a plugin for nvim?
-    - and then things have to be in ./lua, not nvim/lua ... doesnt quite fit
-    o ok pragmatic, make it an nvim plugin, main use-case anyway
+x but then how/where to check out ptags? as a plugin for nvim?
+    x and then things have to be in ./lua, not nvim/lua ... doesnt quite fit
+    x ok pragmatic, make it an nvim plugin, main use-case anyway
+o steps
+    x add setup executable, for plugger people that's the install hook
+    x make lua folder as required for packs
+    - rename to .nvim or so
+    x make requirements in and txt, make a runner and a normal python file
+    x setup also makes venv, setup needs to be re-run on updates
+    - add readme, give to yves and hemanth, see if they can use it
+o tree-sitter
+    - actually try the stack based
+    - compare start/end pos (only end pos) to unstack scopes
+    - should be a tiny bit more efficient, shorter even?
+x precompiled
+    x would make it easier, no submodule
+    x is that okay, it's very small
+    x we keep submodule, but most people dont check it out
+    x or i make a script that knows the hash to checkout for rebuild
+    x or setup script does it?
