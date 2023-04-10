@@ -7,3 +7,5 @@ cd $base
 rm -rf $base/.venv
 python3.10 -m venv $base/.venv
 $base/.venv/bin/pip install -r python/requirements.txt
+
+bin/ptags python/ptags.py
