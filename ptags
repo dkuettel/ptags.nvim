@@ -2,33 +2,34 @@
 # pyright: strict
 
 """! python3.10 requirements
-click==8.1.3
+typer==0.7.0
 tabulate==0.9.0
 ipython==8.11.0
+tree_sitter==0.20.1
 """
 
 from __future__ import annotations
 
-import ast
-import re
+import functools
 import sys
-import time
-from ast import AST
-from collections.abc import Sequence, Set
+from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from enum import Enum
+from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Callable, TextIO
+from typing import Iterable, Iterator, Optional, TextIO
 
-import click
+import typer
 from tabulate import tabulate
+from tree_sitter import Language, Node, Parser
+from tree_sitter.binding import Query
 
 
 class Kind(Enum):
-    function_def = "function"
-    class_def = "class"
-    variable = "variable"
-    error = "syntax-error"
+    FUNCTION = "function"
+    CLASS = "class"
+    VARIABLE = "variable"
 
 
 @dataclass(frozen=True)
@@ -50,148 +51,153 @@ class Symbol(object):
         return "%s [%s]" % (self.name, self.kind)
 
 
-def get_symbols_in_Module(
-    file: Path, scope: tuple[str, ...], node: AST
-) -> list[Symbol]:
-
-    symbols: list[Symbol] = []
-
-    class V(ast.NodeVisitor):
-        def visit_FunctionDef(self, node: ast.FunctionDef):
-            symbols.append(
-                Symbol(scope + (node.name,), node.lineno, Kind.function_def, file)
-            )
-            symbols.extend(
-                get_symbols_in_FunctionDef(file, scope + (node.name,), node.body)
-            )
-
-        def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(
-                Symbol(scope + (node.name,), node.lineno, Kind.class_def, file)
-            )
-            symbols.extend(
-                get_symbols_in_ClassDef(file, scope + (node.name,), node.body)
-            )
-
-        def visit_Assign(self, node: ast.Assign):
-            for t in node.targets:
-                for i in ast.walk(t):
-                    if isinstance(i, ast.Name):
-                        symbols.append(
-                            Symbol(scope + (i.id,), node.lineno, Kind.variable, file)
-                        )
-
-    V().visit(node)
-    return symbols
+def get_ts_query_for_kind(kind: Kind) -> str:
+    match kind:
+        case kind.FUNCTION:
+            return f"(function_definition name: (identifier) @{kind.value})"
+        case kind.CLASS:
+            return f"(class_definition name: (identifier) @{kind.value})"
+        case kind.VARIABLE:
+            return f"(assignment left: (identifier) @{kind.value})"
 
 
-def get_symbols_in_FunctionDef(
-    file: Path, scope: tuple[str, ...], body: Sequence[ast.stmt]
-) -> list[Symbol]:
-
-    symbols: list[Symbol] = []
-
-    class V(ast.NodeVisitor):
-        def visit_ClassDef(self, node: ast.ClassDef):
-            symbols.append(
-                Symbol(scope + (node.name,), node.lineno, Kind.class_def, file)
-            )
-            symbols.extend(
-                get_symbols_in_ClassDef(file, scope + (node.name,), node.body)
-            )
-
-    # TODO is this necessary? cant we just do it on body?
-    # the documentation is not clear even if it goes recursively
-    # ah that would work if we didnt pass in body.body
-    for i in body:
-        # TODO and if we need the loop, dont recreate class
-        V().visit(i)
-
-    return symbols
+def get_ts_queries() -> str:
+    return "\n".join(get_ts_query_for_kind(k) for k in Kind)
 
 
-def get_symbols_in_ClassDef(
-    file: Path, scope: tuple[str, ...], body: Sequence[ast.stmt]
-) -> list[Symbol]:
-    return [j for i in body for j in get_symbols_in_Module(file, scope, i)]
+@functools.cache
+def ts_setup() -> tuple[Parser, Query]:
+    so_file = Path(__file__).parent.resolve() / "tree-sitter.so"
+    repo_path = Path(__file__).parent.resolve() / "tree-sitter-python"
+    Language.build_library(str(so_file), [str(repo_path)])
+    language = Language(str(so_file), "python")
+    parser = Parser()
+    parser.set_language(language)
+    query = language.query(get_ts_queries())
+    return parser, query
 
 
-def get_symbols_in_folder(
-    folder: Path, scope: tuple[str, ...], should_exclude: Callable[[Path], bool]
-) -> list[Symbol]:
-    symbols: list[Symbol] = []
+def parse_and_capture(file: Path) -> list[tuple[Node, str]]:
+    parser, query = ts_setup()
+    source = file.read_text().encode("utf8")
+    tree = parser.parse(source)
+    return query.captures(tree.root_node)
 
-    for f in folder.iterdir():
-        if should_exclude(f):
-            continue
-        if f.is_dir():
-            symbols.extend(get_symbols_in_folder(f, scope + (f.name,), should_exclude))
-        elif f.name == "__init__.py":
-            symbols.extend(get_symbols_in_file(f, scope))
-        elif f.suffix == ".py":
-            # NOTE this way we will miss hash-banged python files
-            # (unless they are given explicitely as a file)
-            symbols.extend(get_symbols_in_file(f, scope + (f.stem,)))
-        else:
+
+def named_parent_block_nodes_from_node(node: Node) -> tuple[list[str], list[Node]]:
+    names: list[str] = []
+    nodes: list[Node] = []
+    at = node.parent
+    while at is not None:
+        if at.type == "block" and at.parent is not None:
+            maybe_name = at.parent.child_by_field_name("name")
+            if maybe_name is not None:
+                names.append(maybe_name.text.decode("utf8"))
+                nodes.append(at.parent)
+        at = at.parent
+    return names, nodes
+
+
+def get_symbol_from_capture(
+    node: Node, name: str, file: Path, file_scope: tuple[str, ...]
+) -> Optional[Symbol]:
+
+    identifier = node.text.decode("utf8")
+    kind = Kind(name)
+    parent_names, parents = named_parent_block_nodes_from_node(node)
+
+    match kind:
+        case Kind.FUNCTION:
             pass
+        case Kind.CLASS:
+            pass
+        case Kind.VARIABLE:
+            for n in parents:
+                if n.type == "function_definition":
+                    return None
+                if n.type == "class_definition":
+                    break
 
-    return symbols
+    scope = tuple(reversed(parent_names))
 
-
-# TODO what's the semantics here, should scope not be without file yet?
-def get_symbols_in_file(file: Path, scope: tuple[str, ...]) -> list[Symbol]:
-    try:
-        t: AST = ast.parse(file.read_text(), filename=file)
-    except SyntaxError:
-        # TODO could we also have a cache of last time we parsed?
-        # TODO or use a parser that is more forgiving?
-        # - maybe https://pypi.org/project/parso/
-        # - also treesitter might be able to recover?
-        return [Symbol(scope, 0, Kind.error, file)]
-    return get_symbols_in_Module(file, scope, t)
-
-
-def get_symbols_in_sources(
-    sources: Set[Path],
-    excludes: Sequence[str],
-) -> list[Symbol]:
-    """sources is a list of folder and/or files"""
-    exclude_matchers = [re.compile(i) for i in excludes]
-
-    def should_exclude(p: Path) -> bool:
-        for m in exclude_matchers:
-            if m.fullmatch(str(p)) is not None:
-                return True
-        return False
-
-    symbols: list[Symbol] = []
-    for source in sources:
-        if should_exclude(source):
-            continue
-        if source.is_dir():
-            symbols.extend(get_symbols_in_folder(source, (), should_exclude))
-        elif source.is_file():
-            symbols.extend(get_symbols_in_file(source, ()))
-    return symbols
+    return Symbol(
+        file_scope + scope + (identifier,),
+        node.start_point[0] + 1,
+        kind,
+        file,
+    )
 
 
-def make_entries(fmt: str, symbols: Sequence[Symbol], out: TextIO):
-    match fmt:
-        case "human":
-            make_human_entries(symbols, out)
-        case "ctags":
-            make_tag_entries(symbols, out)
-        case "vim-telescope":
-            make_vim_telescope_entries(symbols, out)
+def get_symbols_in_file(file: Path, file_scope: tuple[str, ...]) -> list[Symbol]:
+    # NOTE we dont warn about syntax errors in files if there are any
+    candidates = parse_and_capture(file)
+    maybe_symbols = [
+        get_symbol_from_capture(node, name, file, file_scope)
+        for node, name in candidates
+    ]
+    return [s for s in maybe_symbols if s is not None]
+
+
+def get_scope_from_file(file: Path, base: Path) -> tuple[str, ...]:
+    [*parts, last] = file.relative_to(base).parts
+    match last:
+        case "__init__.py":
+            return tuple(parts)
         case _:
-            assert False, fmt
+            return tuple(parts + [file.stem])
+
+
+def get_flat_sources(sources: Sequence[Path]) -> Iterator[tuple[Path, tuple[str, ...]]]:
+    """yields tuples of file and scope"""
+    for source in sources:
+        if source.is_file():
+            yield source, ()
+        elif source.is_dir():
+            for file in source.glob("**/*.py"):
+                yield file, get_scope_from_file(file, source)
+
+
+def get_symbols_in_sources(sources: Sequence[Path]) -> Iterable[Symbol]:
+    ts_setup()
+    with ProcessPoolExecutor(max_workers=cpu_count()) as pool:
+        # NOTE if ever up-front submission takes too long with too many files
+        # consider starting to yield results as soon as they are ready
+        # see as_completed(timeout=...)
+        futures = [
+            pool.submit(get_symbols_in_file, file, scope)
+            for file, scope in get_flat_sources(sources)
+        ]
+        for future in as_completed(futures):
+            yield from future.result()
+
+
+# NOTE probably useful for profiling and debugging
+def get_symbols_in_sources_single_process(sources: Sequence[Path]) -> Iterable[Symbol]:
+    for file, scope in get_flat_sources(sources):
+        yield from get_symbols_in_file(file, scope)
+
+
+class Format(str, Enum):
+    human = "human"
+    ctags = "ctags"
+    telescope = "telescope"
+
+
+def make_entries(format: Format, symbols: Iterable[Symbol], out: TextIO):
+    match format:
+        case Format.human:
+            make_human_entries(list(symbols), out)
+        case Format.ctags:
+            make_tag_entries(list(symbols), out)
+        case Format.telescope:
+            make_telescope_entries(symbols, out)
 
 
 def make_human_entries(symbols: Sequence[Symbol], out: TextIO):
     headers = ["location", "kind", "name"]
     data = [[f"{s.file}:{s.line}", f"{s.kind_str}", f"{s.name}"] for s in symbols]
-    out.write(tabulate(data, headers=headers))
-    out.write("\n")
+    out.write(tabulate(data, headers=headers) + "\n")
+    out.write(f"Found {len(symbols)} symbols.\n")
 
 
 def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
@@ -206,9 +212,9 @@ def make_tag_entries(symbols: Sequence[Symbol], out: TextIO):
     out.write("\n")
 
 
-def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
-    out.write(
-        "\n".join(
+def make_telescope_entries(symbols: Iterable[Symbol], out: TextIO):
+    for s in symbols:
+        out.write(
             "\x00".join(
                 [
                     s.name,
@@ -217,90 +223,15 @@ def make_vim_telescope_entries(symbols: Sequence[Symbol], out: TextIO):
                     str(s.file),
                 ]
             )
-            for s in symbols
+            + "\n"
         )
-    )
     out.write("\n")
 
 
-log_quiet = False
-
-
-def log(message: str, end: str = "\n"):
-    global log_quiet
-    if log_quiet:
-        return
-    print(message, end=end)
-
-
-@click.command(
-    help="""
-        [SOURCES] are folders and files to search.
-        Note that they are each considered to be the root for qualified names.
-        The qualified names are all relative to the arguments you pass here.
-        For example, passing 'python/module/sub/file.py' will register things inside
-        'file.py' not qualified as 'module.sub'. For that you should pass 'python'
-        as a folder.
-    """,
-)
-@click.argument("sources", nargs=-1)
-@click.option(
-    "--out",
-    "-o",
-    default="-",
-    help="output file or - for stdout",
-    show_default=True,
-)
-@click.option(
-    "--quiet/--no-quiet",
-    "-q/",
-    default=False,
-    help="suppress all output to stdout (except for --out=-)",
-    show_default=True,
-)
-@click.option(
-    "--fmt",
-    "-f",
-    default="human",
-    help="formats: human, ctags, vim-telescope",
-    show_default=True,
-)
-@click.option(
-    "excludes",
-    "--exclude",
-    "-e",
-    default=[],
-    multiple=True,
-    help="Regexps for paths to exlude. Can be used multiple times.",
-    # TODO it's not clear if it's on the full path, or on the path starting with the source entry
-    # TODO could we make it a glob, and just find all with glob and remove from set?
-    # not so easy, because we do it recursively
-)
-def main(
-    out: str, sources: Sequence[str], quiet: bool, fmt: str, excludes: Sequence[str]
-):
-    # TODO arr still, typer could make this much shorter above
-    if len(sources) == 0:
-        paths = {Path(".")}
-    else:
-        paths = {Path(s) for s in sources}
-
-    global log_quiet
-    log_quiet = quiet
-
-    dt = time.time()
-    log("scanning ...", end="")
-    symbols = get_symbols_in_sources(paths, excludes)
-    log(" found %d symbols (%d ms)" % (len(symbols), (time.time() - dt) * 1000))
-
-    match out:
-        # NOTE this means we dont support an output file that is actually named "-"
-        case "-":
-            make_entries(fmt, symbols, sys.stdout)
-        case _:
-            with Path(out).open("wt") as f:
-                make_entries(fmt, symbols, f)
+def main(sources: list[Path], format: Format = Format.human):
+    symbols = get_symbols_in_sources(sources)
+    make_entries(format, symbols, sys.stdout)
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)
