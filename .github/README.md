@@ -33,6 +33,8 @@ for `ptags`, LSPs do that just fine. Use `ptags` if you want to navigate
 to a symbol up-front by naming it ... because sometimes you just know
 where you need to be.
 
+![ptags telescope](./ptags-telescope.png "ptags telescope")
+
 install
 -------
 
