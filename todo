@@ -1,29 +1,11 @@
-x but then how/where to check out ptags? as a plugin for nvim?
-    x and then things have to be in ./lua, not nvim/lua ... doesnt quite fit
-    x ok pragmatic, make it an nvim plugin, main use-case anyway
-o steps
-    x add setup executable, for plugger people that's the install hook
-    x make lua folder as required for packs
-    x rename to .nvim or so
-    x make requirements in and txt, make a runner and a normal python file
-    x setup also makes venv, setup needs to be re-run on updates
-    - add readme, give to yves and hemanth, see if they can use it
 o tree-sitter
     - actually try the stack based
     - compare start/end pos (only end pos) to unstack scopes
     - should be a tiny bit more efficient, shorter even?
-x precompiled
-    x would make it easier, no submodule
-    x is that okay, it's very small
-    x we keep submodule, but most people dont check it out
-    x or i make a script that knows the hash to checkout for rebuild
-    x or setup script does it?
 o why no good message when non-zero?
     - is that telescope's business to react to?
     - give stderr if any
     - actually funky-formatter should do the same? maybe?
 o old notes
-    - pyright, jedi, and language servers in general dont seem to index project symbols fully qualified
-    - replace for python with pdocs instead of the original generic LSP call in lspconfig.lua
     - builtin.treesitter() could be adapted to make things fully qualified?
     - function make_entry.gen_from_treesitter(opts) could be interesting for generic tags? if we collect parent identifiers. and faster than the lsps probably, with fully qualified elements
