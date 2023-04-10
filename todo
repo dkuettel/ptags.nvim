@@ -1,3 +1,11 @@
-o but then how/where to check out ptags? as a plugin for nvim?
-    - and then things have to be in ./lua, not nvim/lua ... doesnt quite fit
-    o ok pragmatic, make it an nvim plugin, main use-case anyway
+o tree-sitter
+    - actually try the stack based
+    - compare start/end pos (only end pos) to unstack scopes
+    - should be a tiny bit more efficient, shorter even?
+o why no good message when non-zero?
+    - is that telescope's business to react to?
+    - give stderr if any
+    - actually funky-formatter should do the same? maybe?
+o old notes
+    - builtin.treesitter() could be adapted to make things fully qualified?
+    - function make_entry.gen_from_treesitter(opts) could be interesting for generic tags? if we collect parent identifiers. and faster than the lsps probably, with fully qualified elements

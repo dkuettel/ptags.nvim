@@ -1,12 +1,4 @@
-#!python-with-venv
 # pyright: strict
-
-"""! python3.10 requirements
-typer==0.7.0
-tabulate==0.9.0
-ipython==8.11.0
-tree_sitter==0.20.1
-"""
 
 from __future__ import annotations
 
@@ -67,8 +59,8 @@ def get_ts_queries() -> str:
 
 @functools.cache
 def ts_setup() -> tuple[Parser, Query]:
-    so_file = Path(__file__).parent.resolve() / "tree-sitter.so"
-    repo_path = Path(__file__).parent.resolve() / "tree-sitter-python"
+    so_file = (Path(__file__).parent / "tree-sitter.so").resolve()
+    repo_path = (Path(__file__).parent / "../tree-sitter-python").resolve()
     Language.build_library(str(so_file), [str(repo_path)])
     language = Language(str(so_file), "python")
     parser = Parser()
