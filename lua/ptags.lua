@@ -2,7 +2,7 @@ local pickers = require("telescope.pickers")
 local finders = require("telescope.finders")
 local conf = require("telescope.config").values
 
-local ptags_path = vim.fn.resolve(debug.getinfo(1)["short_src"] .. "../../../ptags")
+local ptags_path = vim.fn.resolve(vim.fs.dirname(debug.getinfo(1).source:sub(2)) .. "/../bin/ptags")
 local kinds = { ["function"] = " func", ["variable"] = "  var", ["class"] = "class" }
 
 local function entry_maker(raw_line)
