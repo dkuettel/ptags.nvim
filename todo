@@ -1,5 +1,6 @@
+general:
 o tree-sitter
-    - actually try the stack based
+    o actually try the stack based
     - compare start/end pos (only end pos) to unstack scopes
     - should be a tiny bit more efficient, shorter even?
 o why no good message when non-zero?
@@ -9,3 +10,14 @@ o why no good message when non-zero?
 o old notes
     - builtin.treesitter() could be adapted to make things fully qualified?
     - function make_entry.gen_from_treesitter(opts) could be interesting for generic tags? if we collect parent identifiers. and faster than the lsps probably, with fully qualified elements
+- more generic
+    - could we just base it on each language's tag.scm or something? with stack based scope?
+
+
+feeback for readme:
+- Plug paste from hemanth
+    - Plug 'dkuettel/ptags.nvim', {'do': './setup'}
+- ptags imported
+- make gif for the demo
+- telescope fuzzy matching can be more awesome
+- advertise fzf for hemanth
