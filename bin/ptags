@@ -2,4 +2,4 @@
 set -eu -o pipefail
 
 base=${0:A:h:h}
-$base/.venv/bin/python $base/python/ptags.py $@
+LD_LIBRARY_PATH= exec $base/.venv/bin/python $base/python/ptags.py $@
