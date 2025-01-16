@@ -2,7 +2,6 @@ local pickers = require("telescope.pickers")
 local finders = require("telescope.finders")
 local conf = require("telescope.config").values
 
-local ptags_path = vim.fn.resolve(vim.fs.dirname(debug.getinfo(1).source:sub(2)) .. "/../bin/ptags")
 local kinds = { ["function"] = " func", ["variable"] = "  var", ["class"] = "class" }
 
 local function entry_maker(raw_line)
@@ -31,7 +30,7 @@ local function telescope(sources, opts)
         error("Sources needs to have at least one element.")
     end
     opts = opts or {}
-    local cmd = { ptags_path, "--format=telescope", unpack(sources) }
+    local cmd = { "ptags", "--format=telescope", unpack(sources) }
     pickers.new(opts, {
         prompt_title = "ptags",
         finder = finders.new_oneshot_job(cmd, {
