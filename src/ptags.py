@@ -12,10 +12,10 @@ from multiprocessing import cpu_count
 from pathlib import Path
 from typing import Iterable, Iterator, Optional, TextIO
 
+import tree_sitter_python
 import typer
 from tabulate import tabulate
-from tree_sitter import Language, Node, Parser
-from tree_sitter.binding import Query
+from tree_sitter import Language, Node, Parser, Query
 
 
 class Kind(Enum):
@@ -59,12 +59,8 @@ def get_ts_queries() -> str:
 
 @functools.cache
 def ts_setup() -> tuple[Parser, Query]:
-    so_file = (Path(__file__).parent / "tree-sitter.so").resolve()
-    repo_path = (Path(__file__).parent / "../tree-sitter-python").resolve()
-    Language.build_library(str(so_file), [str(repo_path)])
-    language = Language(str(so_file), "python")
-    parser = Parser()
-    parser.set_language(language)
+    language = Language(tree_sitter_python.language())
+    parser = Parser(language)
     query = language.query(get_ts_queries())
     return parser, query
 
@@ -93,7 +89,6 @@ def named_parent_block_nodes_from_node(node: Node) -> tuple[list[str], list[Node
 def get_symbol_from_capture(
     node: Node, name: str, file: Path, file_scope: tuple[str, ...]
 ) -> Optional[Symbol]:
-
     identifier = node.text.decode("utf8")
     kind = Kind(name)
     parent_names, parents = named_parent_block_nodes_from_node(node)

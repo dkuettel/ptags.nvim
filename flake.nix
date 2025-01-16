@@ -19,8 +19,22 @@
       packages.x86_64-linux.app = pkgs.writeScriptBin "ptags" ''
         #!${pkgs.zsh}/bin/zsh
         set -eu -o pipefail
-        ${pkgs.uv}/bin/uv run --python=${pkgs.python313}/bin/python --no-python-downloads --project ${self} --isolated --quiet python -m ptags $@
+        args=(
+          --python=${pkgs.python313}/bin/python
+          --no-python-downloads
+          --no-progress
+          --project ${self}
+          --locked
+          # TODO this forces a fresh one? that's not what i want
+          --isolated
+          --no-editable
+          --compile-bytecode
+          --quiet
+          python -m ptags $@
+        )
+        ${pkgs.uv}/bin/uv run $args
       '';
+      packages.x86_64-linux.ts = pkgs.tree-sitter-grammars.tree-sitter-python;
       apps.x86_64-linux.default = {
         type = "app";
         program = "${packages.x86_64-linux.app}/bin/ptags";
