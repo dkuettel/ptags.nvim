@@ -1,5 +1,5 @@
 [project]
-name = "ptags-nvim"
+name = "ptags"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -12,8 +12,8 @@ dependencies = [
     "typer>=0.15.1",
 ]
 
-# [project.scripts]
-# ptags-nvim = "ptags_nvim:main"
+[project.scripts]
+ptags = "ptags:main"
 
 [build-system]
 requires = ["hatchling"]
