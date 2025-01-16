@@ -19,7 +19,7 @@
       packages.x86_64-linux.app = pkgs.writeScriptBin "ptags" ''
         #!${pkgs.zsh}/bin/zsh
         set -eu -o pipefail
-        LD_LIBRARY_PATH=/run/opengl-driver/lib ${pkgs.uv}/bin/uv run --python=${pkgs.python313}/bin/python --no-python-downloads --project ${self} --isolated --quiet python $@
+        ${pkgs.uv}/bin/uv run --python=${pkgs.python313}/bin/python --no-python-downloads --project ${self} --isolated --quiet python -m ptags $@
       '';
       apps.x86_64-linux.default = {
         type = "app";

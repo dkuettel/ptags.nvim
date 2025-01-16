@@ -1,5 +1,0 @@
-#!/bin/zsh
-set -eu -o pipefail
-
-base=${0:A:h:h}
-LD_LIBRARY_PATH= exec $base/.venv/bin/python $base/python/ptags.py $@

@@ -1,2 +1,3 @@
-/python/tree-sitter.so
 /.venv/
+/python/tree-sitter.so
+/result
