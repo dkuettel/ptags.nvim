@@ -65,7 +65,7 @@ def ts_setup() -> tuple[Parser, Query]:
     return parser, query
 
 
-def parse_and_capture(file: Path) -> list[tuple[Node, str]]:
+def parse_and_capture(file: Path) -> dict[str, list[Node]]:
     parser, query = ts_setup()
     source = file.read_text().encode("utf8")
     tree = parser.parse(source)
@@ -120,7 +120,8 @@ def get_symbols_in_file(file: Path, file_scope: tuple[str, ...]) -> list[Symbol]
     candidates = parse_and_capture(file)
     maybe_symbols = [
         get_symbol_from_capture(node, name, file, file_scope)
-        for node, name in candidates
+        for (name, nodes) in candidates.items()
+        for node in nodes
     ]
     return [s for s in maybe_symbols if s is not None]
 
