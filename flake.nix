@@ -30,9 +30,8 @@
           --no-editable
           --compile-bytecode
           --quiet
-          python -m ptags $@
         )
-        ${pkgs.uv}/bin/uv run $args
+        ${pkgs.uv}/bin/uv run $args -- python -Pm ptags $@
       '';
       packages.x86_64-linux.ts = pkgs.tree-sitter-grammars.tree-sitter-python;
       apps.x86_64-linux.default = {
