@@ -216,10 +216,14 @@ def make_telescope_entries(symbols: Iterable[Symbol], out: TextIO):
     out.write("\n")
 
 
-def main(sources: list[Path], format: Format = Format.human):
+def cli(sources: list[Path], format: Format = Format.human):
     symbols = get_symbols_in_sources(sources)
     make_entries(format, symbols, sys.stdout)
 
 
+def main():
+    typer.run(cli)
+
+
 if __name__ == "__main__":
-    typer.run(main)
+    main()
