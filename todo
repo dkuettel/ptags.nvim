@@ -1,4 +1,5 @@
 general:
+o readme is out of date after uv, and after flake even more
 o tree-sitter
     o actually try the stack based
     - compare start/end pos (only end pos) to unstack scopes
