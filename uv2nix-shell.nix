@@ -50,34 +50,3 @@ let
     ]
   );
 
-  # Build virtual environment, with local packages being editable.
-  #
-  # Enable all optional dependencies for development.
-  virtualenv = editablePythonSet.mkVirtualEnv "ptags-dev-env" workspace.deps.all;
-
-in
-pkgs.mkShell {
-  packages = [
-    virtualenv
-    pkgs.uv
-  ];
-
-  env = {
-    # Don't create venv using uv
-    UV_NO_SYNC = "1";
-
-    # Force uv to use Python interpreter from venv
-    UV_PYTHON = "${virtualenv}/bin/python";
-
-    # Prevent uv from downloading managed Python's
-    UV_PYTHON_DOWNLOADS = "never";
-  };
-
-  shellHook = ''
-    # Undo dependency propagation by nixpkgs.
-    unset PYTHONPATH
-
-    # Get repository root using git. This is expanded at runtime by the editable `.pth` machinery.
-    export REPO_ROOT=$(git rev-parse --show-toplevel)
-  '';
-}
