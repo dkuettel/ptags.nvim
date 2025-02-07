@@ -36,14 +36,18 @@
       outputs = system:
         let
           outputs = {
-            packages.default = venv;
-            # TODO https://pyproject-nix.github.io/uv2nix/patterns/applications.html ?
+            packages = {
+              default = venv;
+              app = app;
+            };
             apps.default = { type = "app"; program = "${venv}/bin/ptags"; };
-            # This example provides two different modes of development:
-            # - Impurely using uv to manage virtual environments
-            # - Pure development using uv2nix to manage virtual environments
-            devShells.impure = shellImpure;
-            devShells.uv2nix = shellUv2nix;
+            devShells = {
+              # This example provides two different modes of development:
+              # - Impurely using uv to manage virtual environments
+              # - Pure development using uv2nix to manage virtual environments
+              impure = shellImpure;
+              uv2nix = shellUv2nix;
+            };
           };
 
           pkgs = inputs.nixpkgs.legacyPackages.${system};
@@ -53,6 +57,11 @@
           venv = pythonSet.mkVirtualEnv "ptags-env" workspace.deps.default;
 
           venvDev = editablePythonSet.mkVirtualEnv "ptags-dev-env" workspace.deps.all;
+
+          app = (pkgs.callPackages inputs.pyproject-nix.build.util { }).mkApplication {
+            venv = venv;
+            package = pythonSet.ptags;
+          };
 
           shellImpure = pkgs.mkShell {
             packages = [ python pkgs.uv ];
