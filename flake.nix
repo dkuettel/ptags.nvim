@@ -37,6 +37,7 @@
         let
           outputs = {
             packages.default = venv;
+            # TODO https://pyproject-nix.github.io/uv2nix/patterns/applications.html ?
             apps.default = { type = "app"; program = "${venv}/bin/ptags"; };
             # This example provides two different modes of development:
             # - Impurely using uv to manage virtual environments
