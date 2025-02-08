@@ -26,3 +26,4 @@ packages = ["src/ptags.py"]
 typeCheckingMode = "recommended"
 include = ["src"]
 exclude = ["result", ".venv"]
+reportUnusedCallResult = false

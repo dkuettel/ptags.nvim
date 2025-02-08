@@ -1,16 +1,14 @@
-# pyright: strict
-
 from __future__ import annotations
 
 import functools
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from enum import Enum
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Iterable, Iterator, Optional, TextIO
+from typing import TextIO, override
 
 import tree_sitter_python
 import typer
@@ -39,6 +37,7 @@ class Symbol(object):
     def kind_str(self) -> str:
         return str(self.kind.value)
 
+    @override
     def __str__(self):
         return "%s [%s]" % (self.name, self.kind)
 
@@ -79,7 +78,7 @@ def named_parent_block_nodes_from_node(node: Node) -> tuple[list[str], list[Node
     while at is not None:
         if at.type == "block" and at.parent is not None:
             maybe_name = at.parent.child_by_field_name("name")
-            if maybe_name is not None:
+            if maybe_name is not None and maybe_name.text is not None:
                 names.append(maybe_name.text.decode("utf8"))
                 nodes.append(at.parent)
         at = at.parent
@@ -88,7 +87,9 @@ def named_parent_block_nodes_from_node(node: Node) -> tuple[list[str], list[Node
 
 def get_symbol_from_capture(
     node: Node, name: str, file: Path, file_scope: tuple[str, ...]
-) -> Optional[Symbol]:
+) -> None | Symbol:
+    if node.text is None:
+        return None
     identifier = node.text.decode("utf8")
     kind = Kind(name)
     parent_names, parents = named_parent_block_nodes_from_node(node)
