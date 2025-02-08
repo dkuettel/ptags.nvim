@@ -31,7 +31,7 @@ Note in particular, jumping to a symbol that is under your cursor is not
 navigate to a symbol up-front by naming it ... because sometimes you
 just know where you need to be.
 
-![ptags telescope](./ptags-telescope.png "ptags telescope")
+![ptags telescope](./.github/ptags-telescope.png "ptags telescope")
 
 ## install
 
