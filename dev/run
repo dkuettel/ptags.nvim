@@ -1,0 +1,6 @@
+#!/usr/bin/env zsh
+set -eux -o pipefail
+
+cd ${0:a:h:h}
+# nix run . -- src
+uv run ptags src

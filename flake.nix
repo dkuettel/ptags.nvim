@@ -37,11 +37,14 @@
         let
           outputs = {
             packages = {
-              default = venv;
+              default = app;
               app = app;
+              venv = venv;
+              dev = dev;
             };
             apps.default = { type = "app"; program = "${venv}/bin/ptags"; };
             devShells = {
+              # TODO they didnt quite totally work for me
               # This example provides two different modes of development:
               # - Impurely using uv to manage virtual environments
               # - Pure development using uv2nix to manage virtual environments
@@ -61,6 +64,11 @@
           app = (pkgs.callPackages inputs.pyproject-nix.build.util { }).mkApplication {
             venv = venv;
             package = pythonSet.ptags;
+          };
+
+          dev = pkgs.buildEnv {
+            name = "dev";
+            paths = [ python ] ++ (with pkgs; [ uv ruff basedpyright ]);
           };
 
           shellImpure = pkgs.mkShell {
