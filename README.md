@@ -35,101 +35,62 @@ just know where you need to be.
 
 ## install
 
-### nvim
+### the plugin
 
-Prerequisites:
-
--   `nvim` with `telescope`
--   `zsh`
--   `python3.10`
-
-On a modern ubuntu `sudo apt install zsh python3.10` should work.
-Otherwise see https://launchpad.net/\~deadsnakes/+archive/ubuntu/ppa for
-installing newer pythons on an older ubuntu.
-
-For the purists, with `nvim`'s excellent package support
-(`:help packages`), do the following and adapt paths accordingly:
-
-``` zsh
-cd ~/.config/nvim/pack/plugins/opt
-git clone --recurse-submodules https://github.com/dkuettel/ptags.nvim.git
-cd ptags.nvim
-./setup
-```
-
-Alternatively, put it in `~/.config/nvim/pack/plugins/start` if you want
-it to be loaded automatically.
-
-Running `setup` prepares the python virtual environment. Rerun it when
-you `git pull` to update to changed python dependencies (see
-`python/requirements.in`). If you use any nvim plugin manager, then
-`setup` is your install hook.
-
-Then in your vim lua configuration, to get going:
+The `nvim` plugin part has no `setup` method. You manage your vim
+bindings yourself to call `ptags`. As an example:
 
 ``` lua
-vim.cmd("packadd ptags.nvim")  -- packadd is not needed, if you put it into the "start" folder instead of "opt" above
-local ptags = require("ptags")
-```
-
-The lua interface to `ptags` only offers one entry point:
-`ptags.telescope({"python", "src", "test.py"})` to start telescope and
-fuzzy-match plus jump. Pass a table of folders and files you want to
-search in. Paths are relative to the working directory of the current
-`nvim` instance. It cannot be empty. An additional argument
-`ptags.telescope(..., opts)` is passed on to `telescope` for additional
-`telescope` options.
-
-As a starting point, consider:
-
-``` lua
-vim.cmd("packadd ptags.nvim")
 local ptags = require("ptags")
 
 local function ptags_local()
-    ptags.telescope { vim.fn.expand("%") }
+    ptags.telescope({ vim.fn.expand("%") })
 end
 
 local function ptags_workspace()
     local sources = {
-        vim.fn.glob("python", false, true) or { "." },
+        vim.fn.glob("python", false, true),
+        vim.fn.glob("src", false, true),
         vim.fn.glob("libs/*/python", false, true),
     }
     sources = vim.tbl_flatten(sources)
+    if #sources == 0 then
+        sources = { "." }
+    end
     ptags.telescope(sources)
 end
 
-vim.keymap.set("n", ",.", ptags_local, { buffer = bufnr, desc = "ptags local symbols" })
-vim.keymap.set("n", ",,", ptags_workspace, { buffer = bufnr, desc = "ptags workspace symbols" })
+vim.keymap.set("n", "ge", ptags_local, { buffer = bufnr, desc = "ptags local symbols" })
+vim.keymap.set("n", "gu", ptags_workspace, { buffer = bufnr, desc = "ptags workspace symbols" })
 ```
 
-This maps `,,` to look for symbols in the workspace, and `,.` to only
-look for symbols in the current file. If you use `lspconfig` you might
-want to do this in your `mappings` passed to `lspconfig` only when
-working with python files. This way, non-python projects will do `,,`
-for global symbol search based on whatever LSP is running, while on
-python projects `,,` will instead use `ptags` with fully qualified
-names.
+`ptags.telescope` expects a list of locations for sources. You have to
+provide that. Further:
 
-It is up to you how to conditionally setup `ptags` or not in different
-`nvim` configurations.
-
-# standalone
-
-Same dependencies and steps as for `nvim`:
-
-``` zsh
-sudo apt install zsh python3.10
-cd ~/.config/nvim/pack/plugins/opt
-git clone --recurse-submodules https://github.com/dkuettel/ptags.nvim.git
-cd ptags.nvim
-./setup
+``` lua
+---@param sources string[] Cannot be empty or nil.
+---@param opts table Additional options for telescope.
+---@param ptags string? The ptags executable to use, defaults to "ptags" anywhere in your $PATH.
+local function telescope(sources, opts, ptags)
 ```
 
-Then `bin/ptags` behaves similar to `ctags`. Try
-`ptags --format=human python/ptags.py` for an example output. Try
-`ptags --format=ctags python/ptags.py` for ctags-like output.
+Note especially the last `ptags` argument. Depending on your setup, you
+have to provide that argument.
 
-You can add `bin` to your `$PATH`, or symlink `bin/ptags` into `$PATH`.
-However, note that for `nvim`-use only, it is not required to have it in
-your `$PATH`.
+### the executable
+
+It's easiest to make the `ptags` executable available on your `$PATH`.
+By default that's where the plugins looks for it. But you are free to do
+it anyway you want, as long as you tell the plugin how to find it.
+
+If you use nixos or nixpkgs, the flake's default package builds the
+executable for you; done.
+
+Otherwise, it's a standard `pyproject.toml` python project using `uv`.
+You could make a wrapper around `uv run`, or probably `pipx` works too.
+You need python `3.13`.
+
+The executable can be used standalone, without the plugin. Then `ptags`
+behaves similar to `ctags`. Try `ptags --format=human python/ptags.py`
+for an example output. Try `ptags --format=ctags python/ptags.py` for
+ctags-like output.

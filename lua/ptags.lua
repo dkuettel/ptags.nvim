@@ -25,20 +25,23 @@ end
 ---run ptags on sources and show in telescope
 ---@param sources string[] Cannot be empty or nil.
 ---@param opts table Additional options for telescope.
-local function telescope(sources, opts)
+---@param ptags string? The ptags executable to use, defaults to "ptags" anywhere in your $PATH.
+local function telescope(sources, opts, ptags)
     if sources == nil or #sources == 0 then
         error("Sources needs to have at least one element.")
     end
     opts = opts or {}
-    local cmd = { "ptags", "--format=telescope", unpack(sources) }
-    pickers.new(opts, {
+    ptags = ptags or "ptags"
+    local cmd = { ptags, "--format=telescope", unpack(sources) }
+    local picker = pickers.new(opts, {
         prompt_title = "ptags",
         finder = finders.new_oneshot_job(cmd, {
             entry_maker = entry_maker,
         }),
         sorter = conf.generic_sorter(opts),
         previewer = conf.grep_previewer(opts),
-    }):find()
+    })
+    picker:find()
 end
 
 return { telescope = telescope }

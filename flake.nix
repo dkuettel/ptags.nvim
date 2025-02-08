@@ -68,7 +68,13 @@
 
           dev = pkgs.buildEnv {
             name = "dev";
-            paths = [ python ] ++ (with pkgs; [ uv ruff basedpyright ]);
+            paths = [ python ] ++ (with pkgs; [
+              uv
+              ruff
+              basedpyright
+              lua-language-server
+              stylua
+            ]);
           };
 
           shellImpure = pkgs.mkShell {
