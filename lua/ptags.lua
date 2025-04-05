@@ -24,8 +24,8 @@ end
 
 ---run ptags on sources and show in telescope
 ---@param sources string[] Cannot be empty or nil.
----@param opts table Additional options for telescope.
----@param ptags string? The ptags executable to use, defaults to "ptags" anywhere in your $PATH.
+---@param opts? table Additional options for telescope.
+---@param ptags? string The ptags executable to use, defaults to "ptags" anywhere in your $PATH.
 local function telescope(sources, opts, ptags)
     if sources == nil or #sources == 0 then
         error("Sources needs to have at least one element.")
