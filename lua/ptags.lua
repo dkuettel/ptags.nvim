@@ -2,14 +2,20 @@ local pickers = require("telescope.pickers")
 local finders = require("telescope.finders")
 local conf = require("telescope.config").values
 
-local kinds = { ["function"] = " func", ["variable"] = "  var", ["class"] = "class", ["type alias"] = "type" }
+-- NOTE align with strings of length 5
+local kinds = {
+    ["function"] = " func",
+    ["variable"] = "  var",
+    ["class"] = "class",
+    ["type alias"] = " type",
+}
 
 local function entry_maker(raw_line)
     local name, line, kind, file = string.match(raw_line, "^(.*)%z(.*)%z(.*)%z(.*)$")
     line = tonumber(line)
     kind = kinds[kind]
     if not kind then
-        kind = "???"
+        kind = "  ???"
     end
     local display = kind .. ": " .. name
     return {
