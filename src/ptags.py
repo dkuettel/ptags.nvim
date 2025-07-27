@@ -15,8 +15,6 @@ import typer
 from tabulate import tabulate
 from tree_sitter import Language, Node, Parser, Query, QueryCursor
 
-type Test = str | int
-
 
 class Kind(Enum):
     function = "function"
