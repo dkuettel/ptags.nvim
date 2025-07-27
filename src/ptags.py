@@ -223,7 +223,6 @@ def make_telescope_entries(symbols: Iterable[Symbol], out: TextIO):
             )
             + "\n"
         )
-    out.write("\n")
 
 
 cli = typer.Typer(
