@@ -1,4 +1,6 @@
 general:
+- dev env is problematic, vim sees the dev ptags
+- in vim, ptags doesnt fill content until the first key, probably a telescope problem?
 - the readme image is not a good demo, doesnt show very fully-qualified stuff
 o why no good message when non-zero?
     - is that telescope's business to react to?
