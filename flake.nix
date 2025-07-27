@@ -4,7 +4,7 @@
   # see https://pyproject-nix.github.io/uv2nix/usage/hello-world.html
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-25.05";
 
     pyproject-nix = {
       url = "github:pyproject-nix/pyproject.nix";
@@ -36,73 +36,43 @@
       outputs = system:
         let
           outputs = {
+            # > nix build .#name
             packages = {
-              default = app;
-              app = app;
-              venv = venv;
+              default = dev;
               dev = dev;
+              app = app; # NOTE app doesnt leak the python paths
             };
-            apps.default = { type = "app"; program = "${venv}/bin/ptags"; };
-            devShells = {
-              # TODO they didnt quite totally work for me
-              # This example provides two different modes of development:
-              # - Impurely using uv to manage virtual environments
-              # - Pure development using uv2nix to manage virtual environments
-              impure = shellImpure;
-              uv2nix = shellUv2nix;
-            };
+            # > nix run .#name
+            apps.default = { type = "app"; program = "${app}/bin/ptags"; };
           };
 
           pkgs = inputs.nixpkgs.legacyPackages.${system};
 
-          python = pkgs.python313; # TODO should that not come from the pyproject.toml?
+          python-version = pkgs.lib.strings.fileContents ./.python-version;
+          python-package = "python${pkgs.lib.strings.concatStrings (pkgs.lib.strings.splitString "." python-version)}";
+          python = pkgs.${python-package};
 
           venv = pythonSet.mkVirtualEnv "ptags-env" workspace.deps.default;
-
-          venvDev = editablePythonSet.mkVirtualEnv "ptags-dev-env" workspace.deps.all;
 
           app = (pkgs.callPackages inputs.pyproject-nix.build.util { }).mkApplication {
             venv = venv;
             package = pythonSet.ptags;
           };
 
+          uv = pkgs.writeScriptBin "uv" ''
+            #!${pkgs.zsh}/bin/zsh
+            set -eu -o pipefail
+            UV_PYTHON=${python}/bin/python ${pkgs.uv}/bin/uv --no-python-downloads $@
+          '';
+
           dev = pkgs.buildEnv {
             name = "dev";
-            paths = [ python ] ++ (with pkgs; [
-              uv
+            paths = [ uv python ] ++ (with pkgs; [
               ruff
               basedpyright
               lua-language-server
               stylua
             ]);
-          };
-
-          shellImpure = pkgs.mkShell {
-            packages = [ python pkgs.uv ];
-            env = {
-              UV_PYTHON_DOWNLOADS = "never";
-              UV_PYTHON = python.interpreter;
-            } // inputs.nixpkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
-              # Python libraries often load native shared objects using dlopen(3).
-              # Setting LD_LIBRARY_PATH makes the dynamic library loader aware of libraries without using RPATH for lookup.
-              LD_LIBRARY_PATH = inputs.nixpkgs.lib.makeLibraryPath pkgs.pythonManylinuxPackages.manylinux1;
-            };
-            shellHook = ''
-              unset PYTHONPATH
-            '';
-          };
-
-          shellUv2nix = pkgs.mkShell {
-            packages = [ venvDev pkgs.uv ];
-            env = {
-              UV_NO_SYNC = "1";
-              UV_PYTHON = "${venvDev}/bin/python";
-              UV_PYTHON_DOWNLOADS = "never";
-            };
-            shellHook = ''
-              unset PYTHONPATH
-              export REPO_ROOT=$(git rev-parse --show-toplevel)
-            '';
           };
 
           pythonSet =
@@ -126,42 +96,10 @@
           # see https://pyproject-nix.github.io/uv2nix/FAQ.html
           pyprojectOverrides = _final: _prev: {
             # see https://pyproject-nix.github.io/pyproject.nix/build.html
+            # pprofile = prev.pprofile.overrideAttrs (old:
+            #   { nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ (final.resolveBuildSystem { setuptools = [ ]; }); }
+            # );
           };
-
-          editableOverlay = workspace.mkEditablePyprojectOverlay {
-            root = "$REPO_ROOT";
-          };
-
-          editablePythonSet = pythonSet.overrideScope (
-            inputs.nixpkgs.lib.composeManyExtensions [
-              editableOverlay
-              (final: prev: {
-                hello-world = prev.hello-world.overrideAttrs (old: {
-                  # It's a good idea to filter the sources going into an editable build
-                  # so the editable package doesn't have to be rebuilt on every change.
-                  src = inputs.nixpkgs.lib.fileset.toSource {
-                    root = old.src;
-                    fileset = inputs.nixpkgs.lib.fileset.unions [
-                      (old.src + "/pyproject.toml")
-                      (old.src + "/README.md")
-                      (old.src + "/src/ptags.py")
-                    ];
-                  };
-                  # Hatchling (our build system) has a dependency on the `editables` package when building editables.
-                  #
-                  # In normal Python flows this dependency is dynamically handled, and doesn't need to be explicitly declared.
-                  # This behaviour is documented in PEP-660.
-                  #
-                  # With Nix the dependency needs to be explicitly declared.
-                  nativeBuildInputs =
-                    old.nativeBuildInputs
-                    ++ final.resolveBuildSystem {
-                      editables = [ ];
-                    };
-                });
-              })
-            ]
-          );
 
         in
         outputs;

@@ -8,18 +8,21 @@ from dataclasses import dataclass
 from enum import Enum
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import TextIO, override
+from typing import TextIO, assert_never, override
 
 import tree_sitter_python
 import typer
 from tabulate import tabulate
-from tree_sitter import Language, Node, Parser, Query
+from tree_sitter import Language, Node, Parser, Query, QueryCursor
+
+type Test = str | int
 
 
 class Kind(Enum):
-    FUNCTION = "function"
-    CLASS = "class"
-    VARIABLE = "variable"
+    function = "function"
+    classdef = "class"
+    variable = "variable"
+    type_alias = "type alias"
 
 
 @dataclass(frozen=True)
@@ -44,12 +47,16 @@ class Symbol(object):
 
 def get_ts_query_for_kind(kind: Kind) -> str:
     match kind:
-        case kind.FUNCTION:
-            return f"(function_definition name: (identifier) @{kind.value})"
-        case kind.CLASS:
-            return f"(class_definition name: (identifier) @{kind.value})"
-        case kind.VARIABLE:
-            return f"(assignment left: (identifier) @{kind.value})"
+        case Kind.function:
+            return f"(function_definition name: (identifier) @{kind.name})"
+        case Kind.classdef:
+            return f"(class_definition name: (identifier) @{kind.name})"
+        case Kind.variable:
+            return f"(assignment left: (identifier) @{kind.name})"
+        case Kind.type_alias:
+            return f"(type_alias_statement (type (identifier) @{kind.name}))"
+        case _ as never:
+            assert_never(never)
 
 
 def get_ts_queries() -> str:
@@ -57,11 +64,12 @@ def get_ts_queries() -> str:
 
 
 @functools.cache
-def ts_setup() -> tuple[Parser, Query]:
+def ts_setup() -> tuple[Parser, QueryCursor]:
     language = Language(tree_sitter_python.language())
     parser = Parser(language)
-    query = language.query(get_ts_queries())
-    return parser, query
+    query = Query(language, get_ts_queries())
+    query_cursor = QueryCursor(query)
+    return parser, query_cursor
 
 
 def parse_and_capture(file: Path) -> dict[str, list[Node]]:
@@ -91,20 +99,24 @@ def get_symbol_from_capture(
     if node.text is None:
         return None
     identifier = node.text.decode("utf8")
-    kind = Kind(name)
+    kind = Kind[name]
     parent_names, parents = named_parent_block_nodes_from_node(node)
 
     match kind:
-        case Kind.FUNCTION:
+        case Kind.function:
             pass
-        case Kind.CLASS:
+        case Kind.classdef:
             pass
-        case Kind.VARIABLE:
+        case Kind.variable:
             for n in parents:
                 if n.type == "function_definition":
                     return None
                 if n.type == "class_definition":
                     break
+        case Kind.type_alias:
+            pass  # NOTE they can only be used on module or class level, so we dont have to filter
+        case _ as never:
+            assert_never(never)
 
     scope = tuple(reversed(parent_names))
 
@@ -149,9 +161,6 @@ def get_flat_sources(sources: Sequence[Path]) -> Iterator[tuple[Path, tuple[str,
 def get_symbols_in_sources(sources: Sequence[Path]) -> Iterable[Symbol]:
     ts_setup()
     with ProcessPoolExecutor(max_workers=cpu_count()) as pool:
-        # NOTE if ever up-front submission takes too long with too many files
-        # consider starting to yield results as soon as they are ready
-        # see as_completed(timeout=...)
         futures = [
             pool.submit(get_symbols_in_file, file, scope)
             for file, scope in get_flat_sources(sources)
@@ -180,6 +189,8 @@ def make_entries(format: Format, symbols: Iterable[Symbol], out: TextIO):
             make_tag_entries(list(symbols), out)
         case Format.telescope:
             make_telescope_entries(symbols, out)
+        case _ as never:
+            assert_never(never)
 
 
 def make_human_entries(symbols: Sequence[Symbol], out: TextIO):
@@ -217,14 +228,17 @@ def make_telescope_entries(symbols: Iterable[Symbol], out: TextIO):
     out.write("\n")
 
 
-def cli(sources: list[Path], format: Format = Format.human):
+cli = typer.Typer(
+    no_args_is_help=True,
+    pretty_exceptions_enable=False,
+)
+
+
+@cli.command()
+def main(sources: list[Path], format: Format = Format.human):
     symbols = get_symbols_in_sources(sources)
     make_entries(format, symbols, sys.stdout)
 
 
-def main():
-    typer.run(cli)
-
-
 if __name__ == "__main__":
-    main()
+    cli()

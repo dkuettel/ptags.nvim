@@ -20,16 +20,16 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1738680400,
-        "narHash": "sha256-ooLh+XW8jfa+91F1nhf9OF7qhuA/y1ChLx6lXDNeY5U=",
+        "lastModified": 1753345091,
+        "narHash": "sha256-CdX2Rtvp5I8HGu9swBmYuq+ILwRxpXdJwlpg8jvN4tU=",
         "owner": "nixos",
         "repo": "nixpkgs",
-        "rev": "799ba5bffed04ced7067a91798353d360788b30d",
+        "rev": "3ff0e34b1383648053bba8ed03f201d3466f90c9",
         "type": "github"
       },
       "original": {
         "owner": "nixos",
-        "ref": "nixos-unstable",
+        "ref": "nixos-25.05",
         "repo": "nixpkgs",
         "type": "github"
       }
@@ -47,11 +47,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1737338290,
-        "narHash": "sha256-gnXlfFEHA+/jMH7R+7y3JxrI3WfOjgBhzzJNuFW70UU=",
+        "lastModified": 1753063383,
+        "narHash": "sha256-H+gLv6424OjJSD+l1OU1ejxkN/v0U+yaoQdh2huCXYI=",
         "owner": "pyproject-nix",
         "repo": "build-system-pkgs",
-        "rev": "e1487e5cefda0c7990bdd2e660bee20971680e45",
+        "rev": "45888b7fd4bf36c57acc55f07917bdf49ec89ec9",
         "type": "github"
       },
       "original": {
@@ -67,11 +67,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1738204167,
-        "narHash": "sha256-J5M2sj3x4ocM93shScT/3Z4XWHZhwwW1NyQK+C+8Mys=",
+        "lastModified": 1753063596,
+        "narHash": "sha256-el1vFxDk6DR2hKGYnMfQHR7+K4aMiJDKQRMP3gdh+ZI=",
         "owner": "pyproject-nix",
         "repo": "pyproject.nix",
-        "rev": "0d9f4b90cee1b5c5d6c142ef22de1e246e003ccc",
+        "rev": "cac90713492f23be5f1072bae88406890b9c68f6",
         "type": "github"
       },
       "original": {
@@ -114,11 +114,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1738850824,
-        "narHash": "sha256-C/k6Lf+T+GqLwgy/RPMrGHvYzXPcnJaE9F8zmAeh8sk=",
+        "lastModified": 1753400079,
+        "narHash": "sha256-VC76rfCgtaKPopaLOyAEZ80bpOTQDr7wEZRUCMjoacE=",
         "owner": "pyproject-nix",
         "repo": "uv2nix",
-        "rev": "31b316a8ee16d18c1ff4bbd9ee370cd289388f15",
+        "rev": "350ae196e0e414c03db118d385eabaf50e2a0a53",
         "type": "github"
       },
       "original": {
