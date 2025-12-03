@@ -4,7 +4,7 @@
   # see https://pyproject-nix.github.io/uv2nix/usage/hello-world.html
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-25.05";
+    nixpkgs.url = "github:dkuettel/nixpkgs/stable";
 
     pyproject-nix = {
       url = "github:pyproject-nix/pyproject.nix";
