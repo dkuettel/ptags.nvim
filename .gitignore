@@ -1,4 +1,5 @@
 /.luarc.json
+/.nd
 /.venv/
 /Session.vim
 /result
