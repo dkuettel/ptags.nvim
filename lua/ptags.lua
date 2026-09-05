@@ -58,6 +58,10 @@ end
 ---@param title string
 ---@param sources string[] Cannot be empty or nil.
 function M.picker(title, sources)
+    if sources == nil or #sources == 0 then
+        error("Sources needs to have at least one element.")
+    end
+
     local function picker_finder(_opts, ctx)
         return require("snacks.picker.source.proc").proc(
             ctx:opts {
