@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import json
 import sys
 from collections.abc import Iterable, Iterator, Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -177,6 +178,7 @@ class Format(str, Enum):
     human = "human"
     ctags = "ctags"
     telescope = "telescope"
+    picker = "picker"
 
 
 def make_entries(format: Format, symbols: Iterable[Symbol], out: TextIO):
@@ -187,6 +189,8 @@ def make_entries(format: Format, symbols: Iterable[Symbol], out: TextIO):
             make_tag_entries(list(symbols), out)
         case Format.telescope:
             make_telescope_entries(symbols, out)
+        case Format.picker:
+            make_picker_entries(symbols, out)
         case _ as never:
             assert_never(never)
 
@@ -223,6 +227,21 @@ def make_telescope_entries(symbols: Iterable[Symbol], out: TextIO):
             )
             + "\n"
         )
+
+
+def make_picker_entries(symbols: Iterable[Symbol], out: TextIO):
+    for s in symbols:
+        out.write(
+            json.dumps(
+                {
+                    "name": s.name,
+                    "line": s.line,
+                    "kind": s.kind_str,
+                    "file": str(s.file),
+                }
+            )
+        )
+        out.write("\n")
 
 
 cli = typer.Typer(
