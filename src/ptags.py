@@ -248,7 +248,7 @@ def make_picker_entries(symbols: Iterable[Symbol], out: TextIO):
                 {
                     "name": s.name,
                     "line": s.line,
-                    "kind": s.kind_picker,
+                    "kind": s.kind_str,
                     "file": str(s.file),
                 }
             )
