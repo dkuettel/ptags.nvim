@@ -39,6 +39,18 @@ class Symbol(object):
     def kind_str(self) -> str:
         return str(self.kind.value)
 
+    @property
+    def kind_picker(self) -> str:
+        match self.kind:
+            case Kind.function:
+                return "Function"
+            case Kind.classdef:
+                return "Class"
+            case Kind.variable:
+                return "Variable"
+            case Kind.type_alias:
+                return "TypeAlias"  # TODO picker doesnt have an icon for it
+
     @override
     def __str__(self):
         return "%s [%s]" % (self.name, self.kind)
