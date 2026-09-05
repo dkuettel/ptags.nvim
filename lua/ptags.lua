@@ -54,4 +54,45 @@ function M.telescope(sources, opts, ptags)
     picker:find()
 end
 
+---run ptags on sources and show in picker (from snacks)
+---@param title string
+---@param sources string[] Cannot be empty or nil.
+function M.picker(title, sources)
+    local function picker_finder(_opts, ctx)
+        return require("snacks.picker.source.proc").proc(
+            ctx:opts {
+                cmd = "ptags",
+                args = { "--format=picker", unpack(sources) },
+                transform = function(item)
+                    local j = vim.json.decode(item.text)
+                    return {
+                        text = j["name"],
+                        kind = j["kind"],
+                        file = j["file"],
+                        pos = { j["line"], 0 },
+                    }
+                end,
+            },
+            ctx
+        )
+    end
+
+    Snacks.picker {
+        title = title,
+        layout = {
+            preset = "default",
+            preview = true,
+        },
+        finder = picker_finder,
+        preview = "file",
+        format = function(item, _picker)
+            return {
+                { kinds[item.kind], "Comment", virtual = true },
+                { ":  ", "Comment", virtual = true },
+                { item.text },
+            }
+        end,
+    }
+end
+
 return M
