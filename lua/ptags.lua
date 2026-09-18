@@ -83,10 +83,6 @@ function M.picker(title, sources)
 
     Snacks.picker {
         title = title,
-        layout = {
-            preset = "default",
-            preview = true,
-        },
         finder = picker_finder,
         preview = "file",
         format = function(item, _picker)
